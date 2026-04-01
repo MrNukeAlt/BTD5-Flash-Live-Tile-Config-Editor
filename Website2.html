@@ -2,31 +2,31 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Live Tile Editor - Final Fix</title>
+    <title>Live Tile Editor - Clean Version</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; justify-content: center; padding: 20px; }
-        /* Container for the editor and tabs */
-        .main-container { max-width: 1100px; width: 100%; display: flex; flex-direction: column; gap: 10px; }
+        .main-container { max-width: 1100px; width: 100%; display: flex; flex-direction: column; gap: 0px; }
         
         /* Tab Styling */
-        .tabs { display: flex; gap: 5px; margin-bottom: -1px; }
-        .tab-btn { background: #1e1e1e; border: 1px solid #333; color: #888; padding: 10px 20px; border-radius: 8px 8px 0 0; cursor: pointer; text-decoration: none; font-size: 0.9rem; font-weight: bold; }
-        .tab-btn.active { background: #1e1e1e; border-bottom: 2px solid #4dabf7; color: #4dabf7; }
+        .tabs { display: flex; gap: 5px; }
+        .tab-btn { background: #252526; border: 1px solid #333; color: #888; padding: 10px 20px; border-radius: 8px 8px 0 0; cursor: pointer; text-decoration: none; font-size: 0.9rem; font-weight: bold; border-bottom: none; }
+        .tab-btn.active { background: #1e1e1e; border-top: 2px solid #4dabf7; color: #4dabf7; }
         .tab-btn:hover { background: #2a2a2a; color: #fff; }
 
         .editor-card { background: #1e1e1e; padding: 25px; border-radius: 0 12px 12px 12px; display: flex; gap: 30px; border: 1px solid #333; }
         .controls { width: 320px; }
         .preview-zone { flex: 1; display: flex; flex-direction: column; align-items: center; }
-        canvas { background: #000; border: 2px solid #444; border-radius: 8px; margin-bottom: 20px; }
+        
+        canvas { background: #000; border: 2px solid #444; border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 600px; }
         .group { margin-bottom: 15px; }
         label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
-        input, select { width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; }
+        input, select { width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
         .row { display: flex; gap: 10px; }
-        .code-box { background: #000; padding: 15px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.85rem; width: 100%; box-sizing: border-box; min-height: 100px; margin-bottom: 20px; white-space: pre-wrap; overflow-x: auto; }
-        #code-output { color: #a6e22e; border-left: 4px solid #a6e22e; }
-        #as-output { color: #fd971f; border-left: 4px solid #fd971f; }
+        
+        .code-box { background: #000; padding: 15px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.85rem; width: 100%; box-sizing: border-box; min-height: 150px; white-space: pre-wrap; overflow-x: auto; color: #a6e22e; border-left: 4px solid #a6e22e; }
+        
         h3 { margin-top: 0; color: #4dabf7; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        button { width: 100%; padding: 10px; background: #4dabf7; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        button { width: 100%; padding: 12px; background: #4dabf7; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
         button:hover { background: #3c91d6; }
     </style>
 </head>
@@ -35,7 +35,7 @@
 <div class="main-container">
     <div class="tabs">
         <div class="tab-btn active">Config Editor</div>
-        <a href="https://mrnukealt.github.io/BTD5-Flash-Live-Tile-Config-Editor/Json2ActionScript.html" class="tab-btn">JSON to ActionScript Converter</a>
+        <a href="https://mrnukealt.github.io/BTD5-Flash-Live-Tile-Config-Editor/Json2ActionScript.html" class="tab-btn">JSON to ActionScript</a>
     </div>
 
     <div class="editor-card">
@@ -51,61 +51,6 @@
             <div class="group">
                 <label>Start Point (X, Y)</label>
                 <div class="row">
-                    <input type="number" id="startX" value="50">
-                    <input type="number" id="startY" value="150">
-                </div>
-            </div>
-            <div class="group">
-                <label>End Point (X, Y)</label>
-                <div class="row">
-                    <input type="number" id="endX" value="250">
-                    <input type="number" id="endY" value="150">
-                </div>
-            </div>
-            <div id="arc-only" style="display:none;">
-                <div class="group">
-                    <label>Control Point (X, Y)</label>
-                    <div class="row">
-                        <input type="number" id="bcX" value="150">
-                        <input type="number" id="bcY" value="50">
-                    </div>
-                </div>
-            </div>
-            <div class="row">
-                <div class="group" style="flex:1">
-                    <label>Layer</label>
-                    <input type="number" id="layer" value="0">
-                </div>
-                <div class="group" style="flex:1">
-                    <label>Reflex</label>
-                    <select id="reflex">
-                        <option value="false">False</option>
-                        <option value="true">True</option>
-                    </select>
-                </div>
-            </div>
-            <div class="group">
-                <label>Next Indices (Comma separated)</label>
-                <input type="text" id="indices" value="1, 2">
-            </div>
-            <button id="manualUpdate">Force Refresh</button>
-        </div>
-
-        <div class="preview-zone">
-            <canvas id="tileCanvas" width="400" height="300"></canvas>
-            <label style="width:100%">JSON Output</label>
-            <div id="code-output" class="code-box">JSON will appear here...</div>
-            <label style="width:100%">ActionScript 3.0</label>
-            <div id="as-output" class="code-box">AS3 will appear here...</div>
-        </div>
-    </div>
-</div>
-
-<script>
-    // Your existing logic continues here...
-</script>
-
-</body>
-</html>
+                    <input type="number" id="startX" value="60">
     generate();
 </script>
