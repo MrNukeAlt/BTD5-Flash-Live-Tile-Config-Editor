@@ -4,37 +4,35 @@
     <meta charset="UTF-8">
     <title>Live Tile Editor & Converter</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        /* Navigation */
+        /* Tabs */
         .tabs { display: flex; gap: 5px; width: 100%; max-width: 1000px; }
         .tab-btn { padding: 12px 24px; background: #2a2a2a; border: none; color: #888; cursor: pointer; border-radius: 8px 8px 0 0; transition: 0.3s; }
         .tab-btn.active { background: #1e1e1e; color: #4dabf7; border-bottom: 2px solid #4dabf7; font-weight: bold; }
 
-        /* Layout */
         .tab-content { display: none; width: 100%; max-width: 1000px; }
         .tab-content.active { display: flex; }
-        .editor-card { background: #1e1e1e; padding: 25px; border-radius: 0 0 12px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; gap: 30px; width: 100%; box-sizing: border-box; }
         
+        .editor-card { background: #1e1e1e; padding: 25px; border-radius: 0 0 12px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; gap: 30px; width: 100%; box-sizing: border-box; }
         .controls { width: 350px; flex-shrink: 0; }
-        .preview-zone { flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; min-width: 0; }
+        .preview-zone { flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; }
 
-        /* Zoom Feature */
-        .canvas-container { 
+        /* Canvas Box (Stays Static) */
+        .canvas-box { 
             background: #000; 
             border: 2px solid #333; 
             border-radius: 12px; 
-            overflow: hidden; 
             width: 300px; 
             height: 200px; 
+            overflow: hidden;
         }
-        canvas { transition: transform 0.3s ease; transform-origin: center; display: block; }
-        .zoomed-out canvas { transform: scale(0.6); }
 
         /* Elements */
         .group { margin-bottom: 12px; }
         label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 4px; }
-        input, select { width: 100%; padding: 8px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
+        input, select { width: 100%; padding: 8px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; outline: none; }
+        input:focus { border-color: #4dabf7; }
         .row { display: flex; gap: 8px; }
         
         #code-output { 
@@ -46,167 +44,6 @@
             color: #a6e22e; 
             border-left: 4px solid #a6e22e; 
             width: 100%; 
-            min-height: 200px; 
-            white-space: pre-wrap;
-            word-break: break-all;
-            overflow-y: auto;
-        }
-
-        iframe { width: 100%; height: 85vh; border: none; border-radius: 0 0 12px 12px; background: #fff; }
-        h3 { margin-top: 0; color: #4dabf7; }
-        .btn-refresh { background: #4dabf7; color: #fff; border: none; padding: 8px; border-radius: 4px; cursor: pointer; margin-bottom: 10px; width: 100%; }
-    </style>
-</head>
-<body>
-
-<div class="tabs">
-    <button class="tab-btn active" onclick="switchTab(event, 'editor')">Tile Editor</button>
-    <button class="tab-btn" onclick="switchTab(event, 'converter')">AS3 Converter</button>
-</div>
-
-<div id="editor" class="tab-content active">
-    <div class="editor-card">
-        <div class="controls">
-            <h3>Tile Config</h3>
-            <button class="btn-refresh" onclick="updateUI()">Manual Refresh</button>
-            
-            <div class="group">
-                <label>Type</label>
-                <select id="tileType">
-                    <option value="StraightTile">StraightTile</option>
-                    <option value="ArcTile">ArcTile</option>
-                </select>
-            </div>
-            <div class="group">
-                <label>Start (X, Y)</label>
-                <div class="row">
-                    <input type="number" id="startX" value="50">
-                    <input type="number" id="startY" value="150">
-                </div>
-            </div>
-            <div class="group">
-                <label>End (X, Y)</label>
-                <div class="row">
-                    <input type="number" id="endX" value="250">
-                    <input type="number" id="endY" value="150">
-                </div>
-            </div>
-            <div id="arc-only" style="display:none">
-                <div class="group">
-                    <label>Control Point (X, Y)</label>
-                    <div class="row">
-                        <input type="number" id="bcX" value="150">
-                        <input type="number" id="bcY" value="50">
-                    </div>
-                </div>
-            </div>
-            <div class="row">
-                <div class="group">
-                    <label>Layer</label>
-                    <input type="number" id="layer" value="0">
-                </div>
-                <div class="group">
-                    <label>Reflex</label>
-                    <select id="reflex">
-                        <option value="false">False</option>
-                        <option value="true">True</option>
-                    </select>
-                </div>
-            </div>
-            <div class="group">
-                <label>Next Indices</label>
-                <input type="text" id="indices" value="1, 2">
-            </div>
-        </div>
-
-        <div class="preview-zone">
-            <div class="canvas-container" id="zoomTarget">
-                <canvas id="tileCanvas" width="300" height="200"></canvas>
-            </div>
-            <div id="code-output">Loading...</div>
-        </div>
-    </div>
-</div>
-
-<div id="converter" class="tab-content">
-    <iframe src="https://mrnukealt.github.io/BTD5-Flash-Live-Tile-Config-Editor/Json2ActionScript.html"></iframe>
-</div>
-
-<script>
-    // Global references
-    let canvas, ctx, output, zoomTarget;
-
-    function switchTab(evt, tabName) {
-        const contents = document.getElementsByClassName("tab-content");
-        for (let i = 0; i < contents.length; i++) contents[i].classList.remove("active");
-        const btns = document.getElementsByClassName("tab-btn");
-        for (let i = 0; i < btns.length; i++) btns[i].classList.remove("active");
-        document.getElementById(tabName).classList.add("active");
-        evt.currentTarget.classList.add("active");
-    }
-
-    function updateUI() {
-        if (!ctx) return;
-
-        const type = document.getElementById('tileType').value;
-        const sX = parseInt(document.getElementById('startX').value) || 0;
-        const sY = parseInt(document.getElementById('startY').value) || 0;
-        const eX = parseInt(document.getElementById('endX').value) || 0;
-        const eY = parseInt(document.getElementById('endY').value) || 0;
-        const bcX = parseInt(document.getElementById('bcX').value) || 0;
-        const bcY = parseInt(document.getElementById('bcY').value) || 0;
-        const layer = parseInt(document.getElementById('layer').value) || 0;
-        const reflex = document.getElementById('reflex').value === 'true';
-        const indices = document.getElementById('indices').value.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
-
-        document.getElementById('arc-only').style.display = (type === 'ArcTile') ? 'block' : 'none';
-
-        const data = {
-            type: type,
-            start: { x: sX, y: sY },
-            end: { x: eX, y: eY },
-            nextIndices: indices,
-            layer: layer,
-            reflex: reflex
-        };
-        if (type === 'ArcTile') data.baseCentre = { x: bcX, y: bcY };
-
-        output.textContent = JSON.stringify(data, null, 4);
-        
-        // Draw
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#333'; ctx.strokeRect(0, 0, canvas.width, canvas.height);
-        
-        ctx.beginPath();
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = '#4dabf7';
-        ctx.moveTo(sX, sY);
-        if (type === 'StraightTile') ctx.lineTo(eX, eY);
-        else ctx.quadraticCurveTo(bcX, bcY, eX, eY);
-        ctx.stroke();
-
-        // Dots
-        ctx.fillStyle = '#ff4757'; ctx.beginPath(); ctx.arc(sX, sY, 5, 0, 7); ctx.fill();
-        ctx.fillStyle = '#2ed573'; ctx.beginPath(); ctx.arc(eX, eY, 5, 0, 7); ctx.fill();
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        canvas = document.getElementById('tileCanvas');
-        ctx = canvas.getContext('2d');
-        output = document.getElementById('code-output');
-        zoomTarget = document.getElementById('zoomTarget');
-
-        const inputs = document.querySelectorAll('input, select');
-        inputs.forEach(el => {
-            el.addEventListener('input', updateUI);
-            if (el.type === 'number') {
-                el.addEventListener('focus', () => zoomTarget.classList.add('zoomed-out'));
-                el.addEventListener('blur', () => zoomTarget.classList.remove('zoomed-out'));
-            }
-        });
-
-        updateUI();
-    });
-</script>
+            min-height: 22
 </body>
 </html>
