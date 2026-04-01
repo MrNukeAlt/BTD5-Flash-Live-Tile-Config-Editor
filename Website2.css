@@ -1,0 +1,7 @@
+.canvas-container {
+    position: relative;
+    overflow: hidden; /* Prevents drawing outside the rounded corners */
+    border-radius: 8px;
+    cursor: grab;
+}
+.canvas-container:active { cursor: grabbing; }
