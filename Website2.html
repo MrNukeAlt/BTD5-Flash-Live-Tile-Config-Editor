@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Tile Editor</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #eee; display: flex; justify-content: center; padding: 40px; }
+        .editor-card { background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; gap: 30px; max-width: 1000px; }
+        .controls { width: 350px; }
+        .preview-zone { flex: 1; display: flex; flex-direction: column; align-items: center; }
+        canvas { background: #000; border: 1px solid #333; border-radius: 8px; margin-bottom: 20px; }
+        .group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
+        input, select { width: 100%; padding: 8px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
+        .row { display: flex; gap: 8px; }
+        #code-output { background: #000; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9rem; color: #a6e22e; border-left: 3px solid #a6e22e; width: 100%; box-sizing: border-box; min-height: 150px; }
+        h3 { margin-top: 0; color: #4dabf7; }
+    </style>
+</head>
+<body>
+
+<div class="editor-card">
+    <div class="controls" id="editor-form">
+        <h3>Tile Config</h3>
+        <div class="group">
+            <label>Type</label>
+            <select id="tileType">
+                <option value="StraightTile">StraightTile</option>
+                <option value="ArcTile">ArcTile</option>
+            </select>
+        </div>
+        <div class="group">
+            <label>Start Point (X, Y)</label>
+            <div class="row">
+                <input type="number" id="startX" value="50">
+                <input type="number" id="startY" value="150">
+            </div>
+        </div>
+        <div class="group">
+            <label>End Point (X, Y)</label>
+            <div class="row">
+                <input type="number" id="endX" value="250">
+                <input type="number" id="endY" value="150">
+            </div>
+        </div>
+        <div id="arc-only">
+            <div class="group">
+                <label>Base Centre (Curve Control X, Y)</label>
+                <div class="row">
+                    <input type="number" id="bcX" value="150">
+                    <input type="number" id="bcY" value="50">
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="group">
+                <label>Layer</label>
+                <input type="number" id="layer" value="0">
+            </div>
+            <div class="group">
+                <label>Reflex</label>
+                <select id="reflex">
+                    <option value="false">False</option>
+                    <option value="true">True</option>
+                </select>
+            </div>
+        </div>
+        <div class="group">
+            <label>Next Indices</label>
+            <input type="text" id="indices" value="1, 2">
+        </div>
+    </div>
+
+    <div class="preview-zone">
+        <canvas id="tileCanvas" width="300" height="200"></canvas>
+        <div id="code-output"></div>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('editor-form');
+    const canvas = document.getElementById('tileCanvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('code-output');
+
+    // Add event listeners to all inputs to trigger update on change
+    const inputs = document.querySelectorAll('input, select');
+    inputs.forEach(input => {
+        input.addEventListener('input', generate);
+    });
+
+    function generate() {
+        // 1. Collect Data
+        const type = document.getElementById('tileType').value;
+        const sX = parseInt(document.getElementById('startX').value) || 0;
+        const sY = parseInt(document.getElementById('startY').value) || 0;
+        const eX = parseInt(document.getElementById('endX').value) || 0;
+        const eY = parseInt(document.getElementById('endY').value) || 0;
+        const bcX = parseInt(document.getElementById('bcX').value) || 0;
+        const bcY = parseInt(document.getElementById('bcY').value) || 0;
+        const layer = parseInt(document.getElementById('layer').value) || 0;
+        const reflex = document.getElementById('reflex').value === 'true';
+        const indices = document.getElementById('indices').value.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
+
+        // Toggle visibility of Arc-only controls
+        document.getElementById('arc-only').style.display = (type === 'ArcTile') ? 'block' : 'none';
+
+        // 2. Build JSON Object
+        const tileData = {
+            type: type,
+            start: { x: sX, y: sY },
+            end: { x: eX, y: eY },
+            nextIndices: indices,
+            layer: layer,
+            reflex: reflex
+        };
+
+        if (type === 'ArcTile') {
+            tileData.baseCentre = { x: bcX, y: bcY };
+        }
+
+        // 3. Update Text Output
+        output.textContent = JSON.stringify(tileData, null, 4);
+
+        // 4. Draw Preview
+        draw(type, sX, sY, eX, eY, bcX, bcY);
+    }
+
+    function draw(type, sx, sy, ex, ey, bx, by) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw Grid/Reference (Optional)
+        ctx.strokeStyle = '#333';
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        ctx.setLineDash([]);
+
+        // Style the Tile Line
+        ctx.beginPath();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#4dabf7';
+        ctx.lineCap = 'round';
+
+        ctx.moveTo(sx, sy);
+        if (type === 'StraightTile') {
+            ctx.lineTo(ex, ey);
+        } else {
+            // Use quadraticCurveTo for ArcTiles (using baseCentre as control point)
+            ctx.quadraticCurveTo(bx, by, ex, ey);
+        }
+        ctx.stroke();
+
+        // Draw End Points
+        ctx.fillStyle = '#ff4757'; // Start point
+        ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill();
+        
+        ctx.fillStyle = '#2ed573'; // End point
+        ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill();
+        
+        if (type === 'ArcTile') {
+            ctx.fillStyle = '#eccc68'; // Control point
+            ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    // Run once on load
+    generate();
+</script>
