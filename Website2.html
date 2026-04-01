@@ -2,186 +2,110 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Live Tile Editor</title>
+    <title>Live Tile Editor - Final Fix</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #eee; display: flex; justify-content: center; padding: 40px; }
-        .editor-card { background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; gap: 30px; max-width: 1000px; }
-        .controls { width: 350px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; justify-content: center; padding: 20px; }
+        /* Container for the editor and tabs */
+        .main-container { max-width: 1100px; width: 100%; display: flex; flex-direction: column; gap: 10px; }
+        
+        /* Tab Styling */
+        .tabs { display: flex; gap: 5px; margin-bottom: -1px; }
+        .tab-btn { background: #1e1e1e; border: 1px solid #333; color: #888; padding: 10px 20px; border-radius: 8px 8px 0 0; cursor: pointer; text-decoration: none; font-size: 0.9rem; font-weight: bold; }
+        .tab-btn.active { background: #1e1e1e; border-bottom: 2px solid #4dabf7; color: #4dabf7; }
+        .tab-btn:hover { background: #2a2a2a; color: #fff; }
+
+        .editor-card { background: #1e1e1e; padding: 25px; border-radius: 0 12px 12px 12px; display: flex; gap: 30px; border: 1px solid #333; }
+        .controls { width: 320px; }
         .preview-zone { flex: 1; display: flex; flex-direction: column; align-items: center; }
-        canvas { background: #000; border: 1px solid #333; border-radius: 8px; margin-bottom: 20px; }
-        .group { margin-bottom: 12px; }
-        label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
-        input, select { width: 100%; padding: 8px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
-        .row { display: flex; gap: 8px; }
-        #code-output { background: #000; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9rem; color: #a6e22e; border-left: 3px solid #a6e22e; width: 100%; box-sizing: border-box; min-height: 150px; }
-        h3 { margin-top: 0; color: #4dabf7; }
+        canvas { background: #000; border: 2px solid #444; border-radius: 8px; margin-bottom: 20px; }
+        .group { margin-bottom: 15px; }
+        label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+        input, select { width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; }
+        .row { display: flex; gap: 10px; }
+        .code-box { background: #000; padding: 15px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.85rem; width: 100%; box-sizing: border-box; min-height: 100px; margin-bottom: 20px; white-space: pre-wrap; overflow-x: auto; }
+        #code-output { color: #a6e22e; border-left: 4px solid #a6e22e; }
+        #as-output { color: #fd971f; border-left: 4px solid #fd971f; }
+        h3 { margin-top: 0; color: #4dabf7; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        button { width: 100%; padding: 10px; background: #4dabf7; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        button:hover { background: #3c91d6; }
     </style>
 </head>
 <body>
 
-<div class="editor-card">
-    <div class="controls" id="editor-form">
-        <h3>Tile Config</h3>
-        <div class="group">
-            <label>Type</label>
-            <select id="tileType">
-                <option value="StraightTile">StraightTile</option>
-                <option value="ArcTile">ArcTile</option>
-            </select>
-        </div>
-        <div class="group">
-            <label>Start Point (X, Y)</label>
-            <div class="row">
-                <input type="number" id="startX" value="50">
-                <input type="number" id="startY" value="150">
-            </div>
-        </div>
-        <div class="group">
-            <label>End Point (X, Y)</label>
-            <div class="row">
-                <input type="number" id="endX" value="250">
-                <input type="number" id="endY" value="150">
-            </div>
-        </div>
-        <div id="arc-only">
-            <div class="group">
-                <label>Base Centre (Curve Control X, Y)</label>
-                <div class="row">
-                    <input type="number" id="bcX" value="150">
-                    <input type="number" id="bcY" value="50">
-                </div>
-            </div>
-        </div>
-        <div class="row">
-            <div class="group">
-                <label>Layer</label>
-                <input type="number" id="layer" value="0">
-            </div>
-            <div class="group">
-                <label>Reflex</label>
-                <select id="reflex">
-                    <option value="false">False</option>
-                    <option value="true">True</option>
-                </select>
-            </div>
-        </div>
-        <div class="group">
-            <label>Next Indices</label>
-            <input type="text" id="indices" value="1, 2">
-        </div>
+<div class="main-container">
+    <div class="tabs">
+        <div class="tab-btn active">Config Editor</div>
+        <a href="https://mrnukealt.github.io/BTD5-Flash-Live-Tile-Config-Editor/Json2ActionScript.html" class="tab-btn">JSON to ActionScript Converter</a>
     </div>
 
-    <div class="preview-zone">
-        <canvas id="tileCanvas" width="300" height="200"></canvas>
-        <div id="code-output"></div>
+    <div class="editor-card">
+        <div class="controls">
+            <h3>Tile Config</h3>
+            <div class="group">
+                <label>Type</label>
+                <select id="tileType">
+                    <option value="StraightTile">StraightTile</option>
+                    <option value="ArcTile">ArcTile</option>
+                </select>
+            </div>
+            <div class="group">
+                <label>Start Point (X, Y)</label>
+                <div class="row">
+                    <input type="number" id="startX" value="50">
+                    <input type="number" id="startY" value="150">
+                </div>
+            </div>
+            <div class="group">
+                <label>End Point (X, Y)</label>
+                <div class="row">
+                    <input type="number" id="endX" value="250">
+                    <input type="number" id="endY" value="150">
+                </div>
+            </div>
+            <div id="arc-only" style="display:none;">
+                <div class="group">
+                    <label>Control Point (X, Y)</label>
+                    <div class="row">
+                        <input type="number" id="bcX" value="150">
+                        <input type="number" id="bcY" value="50">
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="group" style="flex:1">
+                    <label>Layer</label>
+                    <input type="number" id="layer" value="0">
+                </div>
+                <div class="group" style="flex:1">
+                    <label>Reflex</label>
+                    <select id="reflex">
+                        <option value="false">False</option>
+                        <option value="true">True</option>
+                    </select>
+                </div>
+            </div>
+            <div class="group">
+                <label>Next Indices (Comma separated)</label>
+                <input type="text" id="indices" value="1, 2">
+            </div>
+            <button id="manualUpdate">Force Refresh</button>
+        </div>
+
+        <div class="preview-zone">
+            <canvas id="tileCanvas" width="400" height="300"></canvas>
+            <label style="width:100%">JSON Output</label>
+            <div id="code-output" class="code-box">JSON will appear here...</div>
+            <label style="width:100%">ActionScript 3.0</label>
+            <div id="as-output" class="code-box">AS3 will appear here...</div>
+        </div>
     </div>
 </div>
 
 <script>
-    const form = document.getElementById('editor-form');
-    const canvas = document.getElementById('tileCanvas');
-    const ctx = canvas.getContext('2d');
-    const output = document.getElementById('code-output');
+    // Your existing logic continues here...
+</script>
 
-    const inputs = document.querySelectorAll('input, select');
-    inputs.forEach(input => {
-        input.addEventListener('input', generate);
-    });
-
-    function generate() {
-        const type = document.getElementById('tileType').value;
-        const sX = parseInt(document.getElementById('startX').value) || 0;
-        const sY = parseInt(document.getElementById('startY').value) || 0;
-        const eX = parseInt(document.getElementById('endX').value) || 0;
-        const eY = parseInt(document.getElementById('endY').value) || 0;
-        const bcX = parseInt(document.getElementById('bcX').value) || 0;
-        const bcY = parseInt(document.getElementById('bcY').value) || 0;
-        const layer = parseInt(document.getElementById('layer').value) || 0;
-        const reflex = document.getElementById('reflex').value === 'true';
-        const indices = document.getElementById('indices').value.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
-
-        document.getElementById('arc-only').style.display = (type === 'ArcTile') ? 'block' : 'none';
-
-        const tileData = {
-            type: type,
-            start: { x: sX, y: sY },
-            end: { x: eX, y: eY },
-            nextIndices: indices,
-            layer: layer,
-            reflex: reflex
-        };
-
-        if (type === 'ArcTile') {
-            tileData.baseCentre = { x: bcX, y: bcY };
-        }
-
-        output.textContent = JSON.stringify(tileData, null, 4);
-
-        // --- NEW AUTO-ZOOM LOGIC ---
-        
-        // 1. Find the boundaries of the tile
-        const padding = 40; // Space around the edges
-        let minX = Math.min(sX, eX);
-        let maxX = Math.max(sX, eX);
-        let minY = Math.min(sY, eY);
-        let maxY = Math.max(sY, eY);
-
-        if (type === 'ArcTile') {
-            minX = Math.min(minX, bcX);
-            maxX = Math.max(maxX, bcX);
-            minY = Math.min(minY, bcY);
-            maxY = Math.max(maxY, bcY);
-        }
-
-        const width = (maxX - minX) || 1;
-        const height = (maxY - minY) || 1;
-
-        // 2. Calculate the required scale to fit the canvas
-        const scaleX = (canvas.width - padding) / width;
-        const scaleY = (canvas.height - padding) / height;
-        const scale = Math.min(scaleX, scaleY, 1); // Never zoom in past 1:1, only zoom out
-
-        // 3. Clear and Transform
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Center the tile in the canvas
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.scale(scale, scale);
-        ctx.translate(-(minX + width / 2), -(minY + height / 2));
-
-        draw(type, sX, sY, eX, eY, bcX, bcY, scale);
-    }
-
-    function draw(type, sx, sy, ex, ey, bx, by, scale) {
-        // Style the Tile Line
-        ctx.beginPath();
-        ctx.lineWidth = 4 / scale; // Keep line width consistent regardless of zoom
-        ctx.strokeStyle = '#4dabf7';
-        ctx.lineCap = 'round';
-
-        ctx.moveTo(sx, sy);
-        if (type === 'StraightTile') {
-            ctx.lineTo(ex, ey);
-        } else {
-            ctx.quadraticCurveTo(bx, by, ex, ey);
-        }
-        ctx.stroke();
-
-        // Draw End Points (scaled circles)
-        const radius = 5 / scale;
-        
-        ctx.fillStyle = '#ff4757'; // Start point
-        ctx.beginPath(); ctx.arc(sx, sy, radius, 0, Math.PI * 2); ctx.fill();
-        
-        ctx.fillStyle = '#2ed573'; // End point
-        ctx.beginPath(); ctx.arc(ex, ey, radius, 0, Math.PI * 2); ctx.fill();
-        
-        if (type === 'ArcTile') {
-            ctx.fillStyle = '#eccc68'; // Control point
-            ctx.beginPath(); ctx.arc(bx, by, radius * 0.8, 0, Math.PI * 2); ctx.fill();
-        }
-    }
-
+</body>
+</html>
     generate();
 </script>
