@@ -59,4 +59,135 @@
                 <label>Base Centre (Curve Control X, Y)</label>
                 <div class="row">
                     <input type="number" id="bcX" value="150">
-                    <input type="number" id="bcY" value="
+                    <input type="number" id="bcY" value="50">
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="group">
+                <label>Layer</label>
+                <input type="number" id="layer" value="0">
+            </div>
+            <div class="group">
+                <label>Reflex</label>
+                <select id="reflex">
+                    <option value="false">False</option>
+                    <option value="true">True</option>
+                </select>
+            </div>
+        </div>
+        <div class="group">
+            <label>Next Indices</label>
+            <input type="text" id="indices" value="1, 2">
+        </div>
+    </div>
+
+    <div class="preview-zone">
+        <canvas id="tileCanvas" width="300" height="200"></canvas>
+        <div id="code-output"></div>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('editor-form');
+    const canvas = document.getElementById('tileCanvas');
+    const ctx = canvas.getContext('2d');
+    const output = document.getElementById('code-output');
+
+    const inputs = document.querySelectorAll('input, select');
+    inputs.forEach(input => {
+        input.addEventListener('input', generate);
+    });
+
+    function generate() {
+        const type = document.getElementById('tileType').value;
+        const sX = parseInt(document.getElementById('startX').value) || 0;
+        const sY = parseInt(document.getElementById('startY').value) || 0;
+        const eX = parseInt(document.getElementById('endX').value) || 0;
+        const eY = parseInt(document.getElementById('endY').value) || 0;
+        const bcX = parseInt(document.getElementById('bcX').value) || 0;
+        const bcY = parseInt(document.getElementById('bcY').value) || 0;
+        const layer = parseInt(document.getElementById('layer').value) || 0;
+        const reflex = document.getElementById('reflex').value === 'true';
+        const indices = document.getElementById('indices').value.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
+
+        document.getElementById('arc-only').style.display = (type === 'ArcTile') ? 'block' : 'none';
+
+        const tileData = {
+            type: type,
+            start: { x: sX, y: sY },
+            end: { x: eX, y: eY },
+            nextIndices: indices,
+            layer: layer,
+            reflex: reflex
+        };
+
+        if (type === 'ArcTile') {
+            tileData.baseCentre = { x: bcX, y: bcY };
+        }
+
+        output.textContent = JSON.stringify(tileData, null, 4);
+
+        // --- AUTO-ZOOM LOGIC ---
+        const padding = 40;
+        let minX = Math.min(sX, eX);
+        let maxX = Math.max(sX, eX);
+        let minY = Math.min(sY, eY);
+        let maxY = Math.max(sY, eY);
+
+        if (type === 'ArcTile') {
+            minX = Math.min(minX, bcX);
+            maxX = Math.max(maxX, bcX);
+            minY = Math.min(minY, bcY);
+            maxY = Math.max(maxY, bcY);
+        }
+
+        const width = (maxX - minX) || 1;
+        const height = (maxY - minY) || 1;
+
+        const scaleX = (canvas.width - padding) / width;
+        const scaleY = (canvas.height - padding) / height;
+        const scale = Math.min(scaleX, scaleY, 1);
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(scale, scale);
+        ctx.translate(-(minX + width / 2), -(minY + height / 2));
+
+        draw(type, sX, sY, eX, eY, bcX, bcY, scale);
+    }
+
+    function draw(type, sx, sy, ex, ey, bx, by, scale) {
+        ctx.beginPath();
+        ctx.lineWidth = 4 / scale;
+        ctx.strokeStyle = '#4dabf7';
+        ctx.lineCap = 'round';
+
+        ctx.moveTo(sx, sy);
+        if (type === 'StraightTile') {
+            ctx.lineTo(ex, ey);
+        } else {
+            ctx.quadraticCurveTo(bx, by, ex, ey);
+        }
+        ctx.stroke();
+
+        const radius = 5 / scale;
+        
+        ctx.fillStyle = '#ff4757'; // Start
+        ctx.beginPath(); ctx.arc(sx, sy, radius, 0, Math.PI * 2); ctx.fill();
+        
+        ctx.fillStyle = '#2ed573'; // End
+        ctx.beginPath(); ctx.arc(ex, ey, radius, 0, Math.PI * 2); ctx.fill();
+        
+        if (type === 'ArcTile') {
+            ctx.fillStyle = '#eccc68'; // Control
+            ctx.beginPath(); ctx.arc(bx, by, radius * 0.8, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    generate();
+</script>
+</body>
+</html>
