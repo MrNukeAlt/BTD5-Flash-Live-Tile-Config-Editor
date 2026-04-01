@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JSON to ActionScript Converter</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; line-height: 1.6; background-color: #f4f4f9; }
+        textarea { width: 100%; height: 120px; font-family: monospace; padding: 10px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; margin: 10px 0; }
+        button:hover { background: #0056b3; }
+        pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+
+    <h2>JSON to ActionScript Converter</h2>
+    
+    <label>Paste JSON here:</label>
+    <textarea id="jsonInput">{ "type": "StraightTile", "start": { "x": 60, "y": 150 }, "end": { "x": 250, "y": 150 }, "nextIndices": [ 1, 2 ], "layer": 0, "reflex": false }</textarea>
+    
+    <button onclick="convertJSON()">Convert to ActionScript</button>
+
+    <h3>Output:</h3>
+    <pre id="asOutput"></pre>
+
+    <script>
+        function convertJSON() {
+            const input = document.getElementById('jsonInput').value;
+            const output = document.getElementById('asOutput');
+
+            try {
+                const data = JSON.parse(input);
+                
+                // Constructing the AS3 String
+                // Note: We format arrays and nested objects to match AS3 syntax
+                let asCode = `var tile:Object = new ${data.type}();\n`;
+                asCode += `tile.start = {x: ${data.start.x}, y: ${data.start.y}};\n`;
+                asCode += `tile.end = {x: ${data.end.x}, y: ${data.end.y}};\n`;
+                asCode += `tile.nextIndices = [${data.nextIndices.join(", ")}];\n`;
+                asCode += `tile.layer = ${data.layer};\n`;
+                asCode += `tile.reflex = ${data.reflex};`;
+
+                output.textContent = asCode;
+            } catch (e) {
+                output.textContent = "Error: Invalid JSON format. Please check your syntax.";
+            }
+        }
+    </script>
+
+</body>
+</html>
