@@ -2,44 +2,58 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Live Tile Editor - Clean Version</title>
+    <title>Live Tile Editor</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; justify-content: center; padding: 20px; }
-        .main-container { max-width: 1100px; width: 100%; display: flex; flex-direction: column; gap: 0px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #eee; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
         /* Tab Styling */
-        .tabs { display: flex; gap: 5px; }
-        .tab-btn { background: #252526; border: 1px solid #333; color: #888; padding: 10px 20px; border-radius: 8px 8px 0 0; cursor: pointer; text-decoration: none; font-size: 0.9rem; font-weight: bold; border-bottom: none; }
-        .tab-btn.active { background: #1e1e1e; border-top: 2px solid #4dabf7; color: #4dabf7; }
-        .tab-btn:hover { background: #2a2a2a; color: #fff; }
+        .tabs { display: flex; gap: 5px; margin-bottom: 0; width: 100%; max-width: 1000px; }
+        .tab-btn { padding: 10px 20px; background: #2a2a2a; border: none; color: #888; cursor: pointer; border-radius: 8px 8px 0 0; transition: 0.3s; }
+        .tab-btn.active { background: #1e1e1e; color: #4dabf7; font-weight: bold; }
+        .tab-content { display: none; width: 100%; max-width: 1000px; }
+        .tab-content.active { display: flex; }
 
-        .editor-card { background: #1e1e1e; padding: 25px; border-radius: 0 12px 12px 12px; display: flex; gap: 30px; border: 1px solid #333; }
-        .controls { width: 320px; }
+        .editor-card { background: #1e1e1e; padding: 25px; border-radius: 0 0 12px 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); gap: 30px; width: 100%; box-sizing: border-box; }
+        .controls { width: 350px; }
         .preview-zone { flex: 1; display: flex; flex-direction: column; align-items: center; }
         
-        canvas { background: #000; border: 2px solid #444; border-radius: 8px; margin-bottom: 20px; width: 100%; max-width: 600px; }
-        .group { margin-bottom: 15px; }
-        label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
-        input, select { width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
-        .row { display: flex; gap: 10px; }
+        /* Zoom Container */
+        .canvas-container { 
+            background: #000; 
+            border: 1px solid #333; 
+            border-radius: 8px; 
+            margin-bottom: 20px; 
+            overflow: hidden; 
+            width: 300px; 
+            height: 200px; 
+        }
+        canvas { 
+            transition: transform 0.3s ease-in-out; 
+            transform-origin: center; 
+        }
+        /* Zoom out effect */
+        .zoomed-out canvas { transform: scale(0.6); }
+
+        .group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.8rem; color: #888; margin-bottom: 4px; }
+        input, select { width: 100%; padding: 8px; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
+        .row { display: flex; gap: 8px; }
+        #code-output { background: #000; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9rem; color: #a6e22e; border-left: 3px solid #a6e22e; width: 100%; box-sizing: border-box; min-height: 150px; white-space: pre-wrap; }
+        h3 { margin-top: 0; color: #4dabf7; }
         
-        .code-box { background: #000; padding: 15px; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.85rem; width: 100%; box-sizing: border-box; min-height: 150px; white-space: pre-wrap; overflow-x: auto; color: #a6e22e; border-left: 4px solid #a6e22e; }
-        
-        h3 { margin-top: 0; color: #4dabf7; border-bottom: 1px solid #333; padding-bottom: 10px; }
-        button { width: 100%; padding: 12px; background: #4dabf7; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; }
-        button:hover { background: #3c91d6; }
+        iframe { width: 100%; height: 80vh; border: none; border-radius: 12px; background: #fff; }
     </style>
 </head>
 <body>
 
-<div class="main-container">
-    <div class="tabs">
-        <div class="tab-btn active">Config Editor</div>
-        <a href="https://mrnukealt.github.io/BTD5-Flash-Live-Tile-Config-Editor/Json2ActionScript.html" class="tab-btn">JSON to ActionScript</a>
-    </div>
+<div class="tabs">
+    <button class="tab-btn active" onclick="openTab('editor')">Config Editor</button>
+    <button class="tab-btn" onclick="openTab('converter')">ActionScript Converter</button>
+</div>
 
+<div id="editor" class="tab-content active">
     <div class="editor-card">
-        <div class="controls">
+        <div class="controls" id="editor-form">
             <h3>Tile Config</h3>
             <div class="group">
                 <label>Type</label>
@@ -51,6 +65,12 @@
             <div class="group">
                 <label>Start Point (X, Y)</label>
                 <div class="row">
-                    <input type="number" id="startX" value="60">
-    generate();
-</script>
+                    <input type="number" id="startX" value="50">
+                    <input type="number" id="startY" value="150">
+                </div>
+            </div>
+            <div class="group">
+                <label>End Point (X, Y)</label>
+                <div class="row">
+                    <input type="number" id="endX" value="250">
+                    <input type="number
