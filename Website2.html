@@ -83,14 +83,12 @@
     const ctx = canvas.getContext('2d');
     const output = document.getElementById('code-output');
 
-    // Add event listeners to all inputs to trigger update on change
     const inputs = document.querySelectorAll('input, select');
     inputs.forEach(input => {
         input.addEventListener('input', generate);
     });
 
     function generate() {
-        // 1. Collect Data
         const type = document.getElementById('tileType').value;
         const sX = parseInt(document.getElementById('startX').value) || 0;
         const sY = parseInt(document.getElementById('startY').value) || 0;
@@ -102,10 +100,8 @@
         const reflex = document.getElementById('reflex').value === 'true';
         const indices = document.getElementById('indices').value.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x));
 
-        // Toggle visibility of Arc-only controls
         document.getElementById('arc-only').style.display = (type === 'ArcTile') ? 'block' : 'none';
 
-        // 2. Build JSON Object
         const tileData = {
             type: type,
             start: { x: sX, y: sY },
@@ -119,25 +115,48 @@
             tileData.baseCentre = { x: bcX, y: bcY };
         }
 
-        // 3. Update Text Output
         output.textContent = JSON.stringify(tileData, null, 4);
 
-        // 4. Draw Preview
-        draw(type, sX, sY, eX, eY, bcX, bcY);
+        // --- NEW AUTO-ZOOM LOGIC ---
+        
+        // 1. Find the boundaries of the tile
+        const padding = 40; // Space around the edges
+        let minX = Math.min(sX, eX);
+        let maxX = Math.max(sX, eX);
+        let minY = Math.min(sY, eY);
+        let maxY = Math.max(sY, eY);
+
+        if (type === 'ArcTile') {
+            minX = Math.min(minX, bcX);
+            maxX = Math.max(maxX, bcX);
+            minY = Math.min(minY, bcY);
+            maxY = Math.max(maxY, bcY);
+        }
+
+        const width = (maxX - minX) || 1;
+        const height = (maxY - minY) || 1;
+
+        // 2. Calculate the required scale to fit the canvas
+        const scaleX = (canvas.width - padding) / width;
+        const scaleY = (canvas.height - padding) / height;
+        const scale = Math.min(scaleX, scaleY, 1); // Never zoom in past 1:1, only zoom out
+
+        // 3. Clear and Transform
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Center the tile in the canvas
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(scale, scale);
+        ctx.translate(-(minX + width / 2), -(minY + height / 2));
+
+        draw(type, sX, sY, eX, eY, bcX, bcY, scale);
     }
 
-    function draw(type, sx, sy, ex, ey, bx, by) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Draw Grid/Reference (Optional)
-        ctx.strokeStyle = '#333';
-        ctx.setLineDash([5, 5]);
-        ctx.strokeRect(0, 0, canvas.width, canvas.height);
-        ctx.setLineDash([]);
-
+    function draw(type, sx, sy, ex, ey, bx, by, scale) {
         // Style the Tile Line
         ctx.beginPath();
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 4 / scale; // Keep line width consistent regardless of zoom
         ctx.strokeStyle = '#4dabf7';
         ctx.lineCap = 'round';
 
@@ -145,24 +164,24 @@
         if (type === 'StraightTile') {
             ctx.lineTo(ex, ey);
         } else {
-            // Use quadraticCurveTo for ArcTiles (using baseCentre as control point)
             ctx.quadraticCurveTo(bx, by, ex, ey);
         }
         ctx.stroke();
 
-        // Draw End Points
+        // Draw End Points (scaled circles)
+        const radius = 5 / scale;
+        
         ctx.fillStyle = '#ff4757'; // Start point
-        ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx, sy, radius, 0, Math.PI * 2); ctx.fill();
         
         ctx.fillStyle = '#2ed573'; // End point
-        ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex, ey, radius, 0, Math.PI * 2); ctx.fill();
         
         if (type === 'ArcTile') {
             ctx.fillStyle = '#eccc68'; // Control point
-            ctx.beginPath(); ctx.arc(bx, by, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(bx, by, radius * 0.8, 0, Math.PI * 2); ctx.fill();
         }
     }
 
-    // Run once on load
     generate();
 </script>
