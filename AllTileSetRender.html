@@ -4,21 +4,24 @@
     <meta charset="UTF-8">
     <title>ActionScript Visualizer - Precision Alignment</title>
     <style>
-        body { background: #1a1a1a; color: #eee; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .ui-panel { background: #2a2a2a; padding: 15px; border-bottom: 2px solid #444; display: flex; gap: 15px; z-index: 10; }
-        textarea { flex: 1; height: 80px; background: #111; color: #0f0; border: 1px solid #555; padding: 8px; font-family: monospace; font-size: 11px; }
-        .controls { display: flex; flex-direction: column; gap: 8px; min-width: 280px; }
+        body { background: #1a1a1a; color: #eee; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .ui-panel { background: #2a2a2a; padding: 12px; border-bottom: 2px solid #444; display: flex; gap: 15px; z-index: 10; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        textarea { flex: 1; height: 90px; background: #111; color: #0f0; border: 1px solid #555; padding: 8px; font-family: 'Consolas', monospace; font-size: 11px; border-radius: 4px; }
+        .controls { display: flex; flex-direction: column; gap: 8px; min-width: 320px; justify-content: center; }
         button { padding: 8px; background: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold; border-radius: 4px; }
-        button.snap { background: #007acc; } /* Blue for alignment */
+        button.snap { background: #007acc; }
         #viewport-container { flex: 1; position: relative; background: #000; overflow: hidden; }
         canvas { display: block; cursor: crosshair; }
+        
         #coord-hud { 
             position: absolute; bottom: 20px; right: 20px; 
-            background: rgba(0,0,0,0.8); color: #0f0; 
-            padding: 10px; border-radius: 5px; border: 1px solid #444;
-            font-family: monospace; font-size: 14px; pointer-events: none;
+            background: rgba(0,0,0,0.85); color: #0f0; 
+            padding: 12px; border-radius: 5px; border: 1px solid #444;
+            font-family: monospace; font-size: 12px; pointer-events: none;
+            line-height: 1.5;
         }
-        .slider-box { font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 5px; }
+        .slider-group { display: grid; grid-template-columns: 80px 1fr; gap: 5px; font-size: 11px; color: #aaa; align-items: center; }
+        .toggle-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #fff; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -26,61 +29,47 @@
     <div class="ui-panel">
         <textarea id="codeInput" placeholder="Paste ActionScript code here..."></textarea>
         <div class="controls">
-            <button id="renderBtn">RENDER TILES</button>
-            <div style="border-top: 1px solid #444; padding-top: 5px;">
-                <input type="file" id="imageLoader" accept="image/*" style="font-size: 10px; width: 100%;">
-                <div class="slider-box">Alpha <input type="range" id="imgAlpha" min="0" max="1" step="0.1" value="0.5"></div>
-                <div class="slider-box">Scale <input type="range" id="imgScale" min="0.01" max="10" step="0.01" value="1"></div>
-                <button class="snap" id="snapBtn">SNAP IMAGE TO (349.63, 262.33)</button>
+            <div class="toggle-row">
+                <button id="renderBtn">RENDER TILES</button>
+                <label><input type="checkbox" id="gridToggle" checked> Show Grid</label>
+            </div>
+            
+            <div style="border-top: 1px solid #444; padding-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+                <input type="file" id="imageLoader" accept="image/*" style="font-size: 10px;">
+                <div class="slider-group">
+                    <span>Alpha</span> <input type="range" id="imgAlpha" min="0" max="1" step="0.05" value="0.5">
+                    <span>Scale</span> <input type="range" id="imgScale" min="0.01" max="10" step="0.01" value="1">
+                    <span>Stroke</span> <input type="range" id="lineWidth" min="1" max="20" step="1" value="3">
+                </div>
+                <button class="snap" id="snapBtn">SNAP IMAGE TO (342.10, 261.02)</button>
             </div>
         </div>
     </div>
     
     <div id="viewport-container">
         <canvas id="tileCanvas"></canvas>
-        <div id="coord-hud">X: 0.00 | Y: 0.00</div>
+        <div id="coord-hud">
+            <div>MOUSE X: <span id="mX">0.00</span> | Y: <span id="mY">0.00</span></div>
+            <div style="color: #00bcff; border-top: 1px solid #333; margin-top: 5px; padding-top: 5px;">
+                IMG CENTER X: <span id="imgX">342.10</span> | Y: <span id="imgY">261.02</span>
+            </div>
+        </div>
     </div>
 
 <script>
 const canvas = document.getElementById('tileCanvas');
 const ctx = canvas.getContext('2d');
-const coordHud = document.getElementById('coord-hud');
+const mXText = document.getElementById('mX'), mYText = document.getElementById('mY');
+const imgXText = document.getElementById('imgX'), imgYText = document.getElementById('imgY');
 
 let tiles = [];
 let camera = { x: 0, y: 0, zoom: 1 };
 let overlayImg = null;
-let imgOffset = { x: 0, y: 0 };
+let imgOffset = { x: 342.10, y: 261.02 }; // Updated Default
 
-/** * SNAP FUNCTION */
-document.getElementById('snapBtn').onclick = () => {
-    // This moves the image center specifically to your requested coordinates
-    imgOffset.x = 349.63;
-    imgOffset.y = 262.33;
-    draw();
-};
-
-/** * PARSER */
-function parseCode() {
-    const rawText = document.getElementById('codeInput').value.replace(/\s+/g, ' ');
-    const results = [];
-    const chunks = rawText.split(/new\s+(StraightTile|ArcTile)/g);
-    for (let i = 1; i < chunks.length; i += 2) {
-        const type = chunks[i], content = chunks[i + 1];
-        const vecRegex = /Vector2\s*\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)/g;
-        const pts = []; let m;
-        while ((m = vecRegex.exec(content)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
-        const isReflex = content.includes("ini_reflex(true)");
-        if (type === "StraightTile" && pts.length >= 2) results.push({ type:'s', p1:pts[0], p2:pts[1] });
-        else if (type === "ArcTile" && pts.length >= 3) results.push({ type:'a', c:pts[0], s:pts[1], e:pts[2], r:isReflex });
-    }
-    return results;
-}
-
-/** * RENDERER */
 function draw() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
     ctx.translate(canvas.width/2 + camera.x, canvas.height/2 + camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
@@ -88,90 +77,107 @@ function draw() {
         ctx.save();
         ctx.globalAlpha = document.getElementById('imgAlpha').value;
         const s = parseFloat(document.getElementById('imgScale').value);
-        // Image is rendered centered at imgOffset
         ctx.translate(imgOffset.x, imgOffset.y);
         ctx.scale(s, s);
         ctx.drawImage(overlayImg, -overlayImg.width/2, -overlayImg.height/2);
         ctx.restore();
     }
 
-    // Grid
-    ctx.strokeStyle = "#333";
-    ctx.lineWidth = 1/camera.zoom;
-    for(let i = -5000; i <= 5000; i+= 100) {
-        ctx.beginPath(); ctx.moveTo(i, -5000); ctx.lineTo(i, 5000); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-5000, i); ctx.lineTo(5000, i); ctx.stroke();
+    if (document.getElementById('gridToggle').checked) {
+        const range = 5000, step = 100, subStep = 10;
+        ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 0.5/camera.zoom;
+        for(let i = -range; i <= range; i += subStep) {
+            if(i % step === 0) continue;
+            ctx.beginPath(); ctx.moveTo(i, -range); ctx.lineTo(i, range); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-range, i); ctx.lineTo(range, i); ctx.stroke();
+        }
+        ctx.strokeStyle = "#333"; ctx.lineWidth = 1/camera.zoom;
+        ctx.font = `${12/camera.zoom}px monospace`; ctx.fillStyle = "#666";
+        for(let i = -range; i <= range; i += step) {
+            ctx.beginPath(); ctx.moveTo(i, -range); ctx.lineTo(i, range); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-range, i); ctx.lineTo(range, i); ctx.stroke();
+            if (i !== 0) {
+                ctx.fillText(i, i + (2/camera.zoom), 15/camera.zoom);
+                ctx.fillText(i, 5/camera.zoom, i - (2/camera.zoom));
+            }
+        }
+        ctx.strokeStyle = "#555"; ctx.lineWidth = 2/camera.zoom;
+        ctx.beginPath(); ctx.moveTo(0, -range); ctx.lineTo(0, range); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-range, 0); ctx.lineTo(range, 0); ctx.stroke();
     }
 
-    // Tiles
+    const baseWidth = parseFloat(document.getElementById('lineWidth').value);
     tiles.forEach((t, i) => {
-        ctx.strokeStyle = `hsl(${(i * 30) % 360}, 80%, 60%)`;
-        ctx.lineWidth = 5 / camera.zoom;
-        ctx.beginPath();
-        if (t.type === 's') { ctx.moveTo(t.p1.x, t.p1.y); ctx.lineTo(t.p2.x, t.p2.y); }
-        else {
+        ctx.strokeStyle = `hsl(${(i * 45) % 360}, 85%, 60%)`;
+        ctx.lineWidth = baseWidth / camera.zoom;
+        ctx.lineCap = "round"; ctx.lineJoin = "round";
+        if (t.type === 's') {
+            ctx.beginPath(); ctx.moveTo(t.p1.x, t.p1.y); ctx.lineTo(t.p2.x, t.p2.y); ctx.stroke();
+        } else {
             const rad = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
             const sa = Math.atan2(t.s.y - t.c.y, t.s.x - t.c.x);
             const ea = Math.atan2(t.e.y - t.c.y, t.e.x - t.c.x);
-            ctx.arc(t.c.x, t.c.y, rad, sa, ea, t.r);
+            let diff = (ea - sa) % (Math.PI * 2); if (diff < 0) diff += Math.PI * 2;
+            ctx.beginPath(); ctx.arc(t.c.x, t.c.y, rad, sa, ea, (t.r !== (diff > Math.PI))); ctx.stroke();
         }
-        ctx.stroke();
     });
 }
 
-/** * INPUTS & CAMERA */
-canvas.onmousemove = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const worldX = (mouseX - canvas.width/2 - camera.x) / camera.zoom;
-    const worldY = (mouseY - canvas.height/2 - camera.y) / camera.zoom;
-    coordHud.innerText = `X: ${worldX.toFixed(2)} | Y: ${worldY.toFixed(2)}`;
-
-    if (isDown) {
-        const dx = e.clientX - lastP.x;
-        const dy = e.clientY - lastP.y;
-        if (e.shiftKey) { 
-            imgOffset.x += dx/camera.zoom; 
-            imgOffset.y += dy/camera.zoom; 
-        } else { 
-            camera.x += dx; 
-            camera.y += dy; 
-        }
-        lastP = {x:e.clientX, y:e.clientY};
-        draw();
-    }
+document.getElementById('snapBtn').onclick = () => {
+    imgOffset = { x: 342.10, y: 261.02 };
+    draw();
+    updateHUD(0, 0);
 };
 
+function updateHUD(wx, wy) {
+    mXText.innerText = wx.toFixed(2); mYText.innerText = wy.toFixed(2);
+    imgXText.innerText = imgOffset.x.toFixed(2); imgYText.innerText = imgOffset.y.toFixed(2);
+}
+
 document.getElementById('renderBtn').onclick = () => {
-    tiles = parseCode();
+    const rawText = document.getElementById('codeInput').value.replace(/\s+/g, ' ');
+    tiles = [];
+    const chunks = rawText.split(/new\s+(StraightTile|ArcTile)/g);
+    for (let i = 1; i < chunks.length; i += 2) {
+        const type = chunks[i], content = chunks[i+1];
+        const vecRegex = /Vector2\s*\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)/g;
+        const pts = []; let m;
+        while ((m = vecRegex.exec(content)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
+        if (type === "StraightTile" && pts.length >= 2) tiles.push({ type:'s', p1:pts[0], p2:pts[1] });
+        else if (type === "ArcTile" && pts.length >= 3) tiles.push({ type:'a', c:pts[0], s:pts[1], e:pts[2], r:content.toLowerCase().includes("reflex(true)") });
+    }
     draw();
 };
 
-document.getElementById('imageLoader').onchange = function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+document.getElementById('imageLoader').onchange = (e) => {
+    const file = e.target.files[0]; if (!file) return;
     const url = URL.createObjectURL(file);
     const tempImg = new Image();
     tempImg.onload = () => { overlayImg = tempImg; draw(); URL.revokeObjectURL(url); };
     tempImg.src = url;
 };
 
-document.getElementById('imgAlpha').oninput = draw;
-document.getElementById('imgScale').oninput = draw;
+['imgAlpha', 'imgScale', 'lineWidth', 'gridToggle'].forEach(id => document.getElementById(id).oninput = draw);
 
 let isDown = false, lastP = {x:0, y:0};
 canvas.onmousedown = (e) => { isDown = true; lastP = {x:e.clientX, y:e.clientY}; };
 window.onmouseup = () => isDown = false;
+canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const wx = (e.clientX - rect.left - canvas.width/2 - camera.x) / camera.zoom;
+    const wy = (e.clientY - rect.top - canvas.height/2 - camera.y) / camera.zoom;
+    updateHUD(wx, wy);
+    if (isDown) {
+        const dx = e.clientX - lastP.x, dy = e.clientY - lastP.y;
+        if (e.shiftKey) { imgOffset.x += dx/camera.zoom; imgOffset.y += dy/camera.zoom; }
+        else { camera.x += dx; camera.y += dy; }
+        lastP = {x:e.clientX, y:e.clientY};
+        draw();
+    }
+};
 canvas.onwheel = (e) => { camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1); draw(); e.preventDefault(); };
-
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 130;
-    draw();
-}
-window.onresize = resize;
-resize();
+window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 130; draw(); };
+window.onresize();
 </script>
 </body>
 </html>
