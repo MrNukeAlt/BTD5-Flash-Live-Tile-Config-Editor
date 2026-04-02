@@ -63,8 +63,8 @@
             <div class="hud-line"><span>MOUSE X:</span> <span id="mX">0.00</span></div>
             <div class="hud-line"><span>MOUSE Y:</span> <span id="mY">0.00</span></div>
             <div style="color: #00bcff; border-top: 1px solid #444; margin-top: 8px; padding-top: 8px;">
-                <div class="hud-line"><span>IMG X (INV):</span> <span id="imgX">-55.82</span></div>
-                <div class="hud-line"><span>IMG Y (INV):</span> <span id="imgY">-404.67</span></div>
+                <div class="hud-line"><span>IMG X:</span> <span id="imgX">-55.82</span></div>
+                <div class="hud-line"><span>IMG Y:</span> <span id="imgY">-404.67</span></div>
                 <div class="saved-coord">SAVED: <span id="savedVal">-55.82, -404.67</span></div>
             </div>
         </div>
@@ -99,7 +99,7 @@ function draw() {
         ctx.save();
         ctx.globalAlpha = document.getElementById('imgAlpha').value;
         const s = parseFloat(document.getElementById('imgScale').value);
-        ctx.translate(-imgOffset.x, -imgOffset.y); // Inverted logic
+        ctx.translate(-imgOffset.x, -imgOffset.y); 
         ctx.scale(s, s);
         ctx.drawImage(overlayImg, -overlayImg.width/2, -overlayImg.height/2);
         ctx.restore();
@@ -133,7 +133,6 @@ function draw() {
     });
 }
 
-// SAVE & SNAP LOGIC
 document.getElementById('saveBtn').onclick = () => {
     savedOffset = { ...imgOffset };
     const str = `${savedOffset.x.toFixed(2)}, ${savedOffset.y.toFixed(2)}`;
@@ -150,7 +149,6 @@ document.getElementById('renderBtn').onclick = () => {
     const rawText = document.getElementById('codeInput').value;
     tiles = [];
     
-    // Simple parse (Auto-Fit removed)
     const chunks = rawText.split(/new\s+(StraightTile|ArcTile)/g);
     for (let i = 1; i < chunks.length; i += 2) {
         const type = chunks[i], content = chunks[i+1];
@@ -167,7 +165,6 @@ document.getElementById('renderBtn').onclick = () => {
     draw();
 };
 
-// Standard UI interaction
 document.getElementById('imageLoader').onchange = (e) => {
     const file = e.target.files[0]; if (!file) return;
     const url = URL.createObjectURL(file);
