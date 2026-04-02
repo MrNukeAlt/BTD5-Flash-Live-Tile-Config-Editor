@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Track Visualizer - Custom Snap & Save</title>
+    <title>Track Visualizer - Multi-Format Support</title>
     <style>
-        :root { --panel-bg: #2a2a2a; --accent: #4CAF50; --snap-blue: #007acc; --save-gold: #c9a01c; --text: #eee; }
+        :root { --panel-bg: #2a2a2a; --accent: #4CAF50; --snap-blue: #007acc; --save-gold: #c9a01c; --text: #eee; --json-purple: #9c27b0; }
         body { background: #1a1a1a; color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
         .ui-panel { background: var(--panel-bg); padding: 15px; border-bottom: 2px solid #444; display: flex; gap: 20px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -21,7 +21,14 @@
 
         .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: #222; padding: 10px; border-radius: 4px; border: 1px solid #444; margin-top: 5px; }
         .slider-box { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #aaa; }
-        .check-row { grid-column: span 2; display: flex; justify-content: space-between; font-size: 11px; align-items: center; border-top: 1px solid #333; pt: 5px; margin-top: 5px; padding-top: 5px;}
+        
+        .format-switch { grid-column: span 2; display: flex; background: #111; border-radius: 4px; padding: 2px; border: 1px solid #444; }
+        .format-switch label { flex: 1; text-align: center; font-size: 10px; padding: 4px; cursor: pointer; border-radius: 2px; color: #666; }
+        .format-switch input { display: none; }
+        .format-switch input:checked + span { background: #444; color: #fff; display: block; border-radius: 2px; }
+        .format-switch input#fmtJson:checked + span { color: #e199ff; }
+
+        .check-row { grid-column: span 2; display: flex; justify-content: space-between; font-size: 11px; align-items: center; border-top: 1px solid #333; margin-top: 5px; padding-top: 5px;}
         
         #viewport-container { flex: 1; position: relative; background: #000; overflow: hidden; }
         canvas { display: block; cursor: crosshair; }
@@ -34,23 +41,28 @@
 <body>
 
     <div class="ui-panel">
-        <textarea id="codeInput" placeholder="// Paste Vector.<Tile> code here..."></textarea>
+        <textarea id="codeInput" placeholder="// Paste AS3 Vector or JSON nodes here..."></textarea>
         
         <div class="controls">
             <button id="renderBtn">RENDER TILES</button>
             
             <div class="preset-row">
-                <button id="saveBtn" title="Save current image position">SAVE POS</button>
+                <button id="saveBtn">SAVE POS</button>
                 <button id="snapBtn">SNAP TO SAVED: (<span id="savedDisplay">-55.82, -404.67</span>)</button>
             </div>
 
             <div class="settings-grid">
+                <div class="format-switch">
+                    <label><input type="radio" name="format" id="fmtAs3" checked><span>ACTIONSCRIPT</span></label>
+                    <label><input type="radio" name="format" id="fmtJson"><span>JSON NODES</span></label>
+                </div>
+
                 <div class="slider-box"><span>Alpha</span><input type="range" id="imgAlpha" min="0" max="1" step="0.05" value="0.5"></div>
                 <div class="slider-box"><span>Scale</span><input type="range" id="imgScale" min="0.01" max="10" step="0.01" value="1"></div>
                 
                 <div class="check-row">
                     <label><input type="checkbox" id="gridToggle" checked> Grid</label>
-                    <label title="Automatically snap to saved pos on render"><input type="checkbox" id="autoSnapOnRender" checked> Auto-Snap on Render</label>
+                    <label><input type="checkbox" id="autoSnapOnRender" checked> Auto-Snap</label>
                     <input type="file" id="imageLoader" accept="image/*" style="width: 75px;">
                 </div>
             </div>
@@ -82,16 +94,12 @@ const hud = {
 let tiles = [];
 let camera = { x: 0, y: 0, zoom: 1 };
 let overlayImg = null;
-
-// The current working offset
 let imgOffset = { x: -55.82, y: -404.67 };
-// The saved preset
 let savedOffset = { x: -55.82, y: -404.67 };
 
 function draw() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
     ctx.translate(canvas.width / 2 + camera.x, canvas.height / 2 + camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
@@ -123,7 +131,7 @@ function draw() {
         ctx.lineCap = "round"; ctx.lineJoin = "round";
         if (t.type === 's') {
             ctx.beginPath(); ctx.moveTo(t.p1.x, t.p1.y); ctx.lineTo(t.p2.x, t.p2.y); ctx.stroke();
-        } else {
+        } else if (t.type === 'a') {
             const rad = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
             const sa = Math.atan2(t.s.y - t.c.y, t.s.x - t.c.x);
             const ea = Math.atan2(t.e.y - t.c.y, t.e.x - t.c.x);
@@ -132,6 +140,49 @@ function draw() {
         }
     });
 }
+
+function parseAS3(text) {
+    const newTiles = [];
+    const chunks = text.split(/new\s+(StraightTile|ArcTile)/g);
+    for (let i = 1; i < chunks.length; i += 2) {
+        const type = chunks[i], content = chunks[i+1];
+        const vecRegex = /Vector2\s*\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)/g;
+        const pts = []; let m;
+        while ((m = vecRegex.exec(content)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
+        if (type === "StraightTile" && pts.length >= 2) newTiles.push({ type:'s', p1:pts[0], p2:pts[1] });
+        else if (type === "ArcTile" && pts.length >= 3) newTiles.push({ type:'a', c:pts[0], s:pts[1], e:pts[2], r:content.toLowerCase().includes("reflex(true)") });
+    }
+    return newTiles;
+}
+
+function parseJSON(text) {
+    try {
+        const data = JSON.parse(text);
+        const list = Array.isArray(data) ? data : (data.tiles || data.nodes || []);
+        return list.map(item => {
+            if (item.type === 'StraightTile' || item.type === 's') {
+                return { type: 's', p1: item.p1, p2: item.p2 };
+            } else if (item.type === 'ArcTile' || item.type === 'a') {
+                return { type: 'a', c: item.c, s: item.s, e: item.e, r: !!item.r };
+            }
+            return null;
+        }).filter(t => t !== null);
+    } catch (e) {
+        alert("JSON Parse Error: Check your syntax.");
+        return [];
+    }
+}
+
+document.getElementById('renderBtn').onclick = () => {
+    const rawText = document.getElementById('codeInput').value;
+    const isJson = document.getElementById('fmtJson').checked;
+    tiles = isJson ? parseJSON(rawText) : parseAS3(rawText);
+
+    if (document.getElementById('autoSnapOnRender').checked) {
+        imgOffset = { ...savedOffset };
+    }
+    draw();
+};
 
 document.getElementById('saveBtn').onclick = () => {
     savedOffset = { ...imgOffset };
@@ -142,26 +193,6 @@ document.getElementById('saveBtn').onclick = () => {
 
 document.getElementById('snapBtn').onclick = () => {
     imgOffset = { ...savedOffset };
-    draw();
-};
-
-document.getElementById('renderBtn').onclick = () => {
-    const rawText = document.getElementById('codeInput').value;
-    tiles = [];
-    
-    const chunks = rawText.split(/new\s+(StraightTile|ArcTile)/g);
-    for (let i = 1; i < chunks.length; i += 2) {
-        const type = chunks[i], content = chunks[i+1];
-        const vecRegex = /Vector2\s*\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)/g;
-        const pts = []; let m;
-        while ((m = vecRegex.exec(content)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
-        if (type === "StraightTile" && pts.length >= 2) tiles.push({ type:'s', p1:pts[0], p2:pts[1] });
-        else if (type === "ArcTile" && pts.length >= 3) tiles.push({ type:'a', c:pts[0], s:pts[1], e:pts[2], r:content.toLowerCase().includes("reflex(true)") });
-    }
-
-    if (document.getElementById('autoSnapOnRender').checked) {
-        imgOffset = { ...savedOffset };
-    }
     draw();
 };
 
