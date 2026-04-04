@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BTD5 Advanced Round Factory - HalfHydra Assets</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #0b0b0b; color: #f0f0f0; }
+        .container { max-width: 1100px; margin: auto; background: #181818; padding: 25px; border-radius: 12px; border: 1px solid #333; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        h1 { color: #00d2ff; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 20px; }
+        
+        textarea { width: 100%; height: 100px; font-family: 'Consolas', monospace; background: #000; color: #00ff41; border: 1px solid #444; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
+        
+        .round-card { background: #222; border-left: 6px solid #00d2ff; margin-bottom: 30px; border-radius: 6px; overflow: hidden; }
+        .round-header { background: #2d2d2d; padding: 15px; font-weight: bold; color: #00d2ff; display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
+        
+        .group-container { padding: 20px; border-bottom: 1px solid #333; display: flex; gap: 25px; align-items: center; background: #1a1a1a; }
+        
+        /* Bloon Visual System */
+        .bloon-box { width: 110px; text-align: center; flex-shrink: 0; }
+        .bloon-preview { 
+            width: 95px; height: 95px; background: radial-gradient(circle, #333, #111); border: 2px solid #444; 
+            border-radius: 15px; display: flex; align-items: center; justify-content: center; 
+            position: relative; margin-bottom: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .bloon-preview img.bloon-sprite { max-width: 80%; max-height: 80%; z-index: 2; filter: drop-shadow(0 4px 4px rgba(0,0,0,0.8)); }
+        
+        /* Property Overlays */
+        .camo-overlay { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: url('https://halfhydra.github.io/BTD5ChallengeEditor/Images/Camo.png') center no-repeat;
+            background-size: contain; opacity: 0.8; z-index: 3; display: none; pointer-events: none;
+        }
+        .is-camo .camo-overlay { display: block; }
+        .regen-icon { 
+            position: absolute; top: -10px; right: -10px; width: 35px; height: 35px;
+            background: url('https://halfhydra.github.io/BTD5ChallengeEditor/Images/Reggrow.png') center no-repeat;
+            background-size: contain; z-index: 4; display: none; 
+        }
+        .is-regen .regen-icon { display: block; }
+
+        .group-data { flex-grow: 1; }
+        .data-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 12px; }
+        .data-grid div { display: flex; flex-direction: column; font-size: 0.7em; color: #888; text-transform: uppercase; }
+        
+        input, select { background: #050505; color: white; border: 1px solid #444; padding: 8px; border-radius: 5px; margin-top: 5px; }
+        .spawner-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 5px; background: #111; padding: 6px; border-radius: 4px; border: 1px solid #222; }
+        
+        .btn-load { background: #007bff; color: white; padding: 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1.1em; transition: 0.2s; }
+        .btn-load:hover { background: #0056b3; }
+        .btn-export { background: #28a745; color: white; width: 100%; padding: 20px; font-size: 1.3em; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 25px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>BTD5 Advanced Round Editor</h1>
+    <textarea id="inputCode" placeholder="Paste your RoundFactory.txt code here..."></textarea>
+    <button class="btn-load" onclick="processCode()">LOAD ROUNDS & SYNC IMAGES</button>
+
+    <div id="editorUI" style="display:none; margin-top:20px;">
+        <div id="roundsList"></div>
+        <button class="btn-export" onclick="exportCode()">GENERATE EXPORT CODE</button>
+        <textarea id="outputCode" readonly style="height:250px; color:#00bcff; margin-top:15px;"></textarea>
+    </div>
+</div>
+
+<script>
+let roundsData = [];
+
+// HalfHydra BTD5 Bloon Path Mapping
+const baseDir = "https://halfhydra.github.io//BTD5ChallengeEditor/Images/Bloon/";
+const assetMap = {
+    0: "Red.png", 1: "Blue.png", 2: "Green.png", 3: "Yellow.png", 
+    4: "Pink.png", 5: "Black.png", 6: "White.png", 7: "Lead.png", 
+    8: "Zebra.png", 9: "Rainbow.png", 10: "Ceramic.png", 
+    11: "MOAB.png", 12: "BFB.png", 13: "ZOMG.png"
+};
+
+const names = ["Red", "Blue", "Green", "Yellow", "Pink", "Black", "White", "Lead", "Zebra", "Rainbow", "Ceramic", "MOAB", "BFB", "ZOMG"];
+
+function processCode() {
+    let raw = document.getElementById('inputCode').value.replace(/\r?\n|\r/g, " ").replace(/\s+/g, " ");
+    const roundChunks = raw.split(/new RoundDef\(\)/g).filter(c => c.trim().length > 0);
+    roundsData = [];
+
+    roundChunks.forEach((chunk) => {
+        let flavorMatch = chunk.match(/\.FlavorText\s*\(\s*"([^"]*)"\s*\)/);
+        let groups = [];
+        const groupRegex = /new GroupDef\(\)\.Bloon\(new BloonDef\(\)\.Regen\((true|false)\)\.Type\((\d+)\)\.Camo\((true|false)\)\)\.Spawners\(Vector\.<SpawnerDef>\(\[([\s\S]*?)\]\)\)/g;
+        
+        let gMatch;
+        while ((gMatch = groupRegex.exec(chunk)) !== null) {
+            let spawners = [];
+            const spawnerRegex = /new\s+SpawnerDef\s*\(\s*\)\s*\.\s*Length\s*\(\s*([\d.]+)\s*\)\s*\.\s*Count\s*\(\s*(\d+)\s*\)\s*\.\s*Start\s*\(\s*([\d.]+)\s*\)/g;
+            let sMatch;
+            while ((sMatch = spawnerRegex.exec(gMatch[4])) !== null) {
+                spawners.push({ length: sMatch[1], count: sMatch[2], start: sMatch[3] });
+            }
+            groups.push({ regen: gMatch[1], type: gMatch[2], camo: gMatch[3], spawners: spawners });
+        }
+        if (groups.length > 0 || (flavorMatch && flavorMatch[1])) {
+            roundsData.push({ flavor: flavorMatch ? flavorMatch[1] : "", groups: groups });
+        }
+    });
+    renderEditor();
+}
+
+function renderEditor() {
+    const list = document.getElementById('roundsList');
+    list.innerHTML = "";
+    document.getElementById('editorUI').style.display = 'block';
+
+    roundsData.forEach((round, rIdx) => {
+        let card = document.createElement('div');
+        card.className = 'round-card';
+        
+        let groupsHtml = round.groups.map((g, gIdx) => {
+            const fileName = assetMap[g.type] || "Red.png";
+            return `
+            <div class="group-container">
+                <div class="bloon-box">
+                    <div class="bloon-preview ${g.camo === 'true' ? 'is-camo' : ''} ${g.regen === 'true' ? 'is-regen' : ''}" id="v-${rIdx}-${gIdx}">
+                        <img class="bloon-sprite" src="${baseDir}${fileName}">
+                        <div class="camo-overlay"></div>
+                        <div class="regen-icon"></div>
+                    </div>
+                    <div style="font-size:12px; font-weight:bold; color:#00bcff;">${names[g.type] || 'Unknown'}</div>
+                </div>
+                <div class="group-data">
+                    <div class="data-grid">
+                        <div><label>Type ID</label><input type="number" min="0" max="13" value="${g.type}" onchange="updateVis(${rIdx},${gIdx},'type',this.value)"></div>
+                        <div><label>Regen</label><select onchange="updateVis(${rIdx},${gIdx},'regen',this.value)"><option ${g.regen==='true'?'selected':''}>true</option><option ${g.regen==='false'?'selected':''}>false</option></select></div>
+                        <div><label>Camo</label><select onchange="updateVis(${rIdx},${gIdx},'camo',this.value)"><option ${g.camo==='true'?'selected':''}>true</option><option ${g.camo==='false'?'selected':''}>false</option></select></div>
+                    </div>
+                    ${g.spawners.map((s, sIdx) => `
+                        <div class="spawner-row">
+                            <input type="number" step="any" value="${s.length}" onchange="roundsData[${rIdx}].groups[${gIdx}].spawners[${sIdx}].length=this.value">
+                            <input type="number" value="${s.count}" onchange="roundsData[${rIdx}].groups[${gIdx}].spawners[${sIdx}].count=this.value">
+                            <input type="number" step="any" value="${s.start}" onchange="roundsData[${rIdx}].groups[${gIdx}].spawners[${sIdx}].start=this.value">
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+        }).join('');
+
+        card.innerHTML = `<div class="round-header">ROUND ${rIdx + 1} <span>${round.flavor}</span></div>${groupsHtml}`;
+        list.appendChild(card);
+    });
+}
+
+function updateVis(rIdx, gIdx, field, val) {
+    roundsData[rIdx].groups[gIdx][field] = val;
+    const view = document.getElementById(`v-${rIdx}-${gIdx}`);
+    if (field === 'type') {
+        view.querySelector('.bloon-sprite').src = baseDir + (assetMap[val] || "Red.png");
+        view.nextElementSibling.innerText = names[val] || 'Unknown';
+    }
+    if (field === 'camo') val === 'true' ? view.classList.add('is-camo') : view.classList.remove('is-camo');
+    if (field === 'regen') val === 'true' ? view.classList.add('is-regen') : view.classList.remove('is-regen');
+}
+
+function exportCode() {
+    let out = "this.rounds = new RoundsDef().Rounds(Vector.<RoundDef>([ \n";
+    roundsData.forEach((r, idx) => {
+        let rStr = `  new RoundDef()`;
+        if(r.flavor) rStr += `.FlavorText("${r.flavor}")`;
+        let gStrings = r.groups.map(g => {
+            let sStrings = g.spawners.map(s => `new SpawnerDef().Length(${s.length}).Count(${s.count}).Start(${s.start})`).join(',');
+            return `new GroupDef().Bloon(new BloonDef().Regen(${g.regen}).Type(${g.type}).Camo(${g.camo})).Spawners(Vector.<SpawnerDef>([${sStrings}]))`;
+        });
+        rStr += `.Groups(Vector.<GroupDef>([${gStrings.join(',')}]))`;
+        out += rStr + (idx < roundsData.length - 1 ? ",\n" : "\n");
+    });
+    out += "]));";
+    document.getElementById('outputCode').value = out;
+}
+</script>
+</body>
+</html>
