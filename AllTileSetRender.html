@@ -2,206 +2,359 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Track Visualizer - AS3 & JSON Support</title>
+    <title>Ultimate BTD Map Editor</title>
     <style>
-        :root { --panel-bg: #2a2a2a; --accent: #4CAF50; --snap-blue: #007acc; --save-gold: #c9a01c; --text: #eee; }
-        body { background: #1a1a1a; color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        :root { --bg: #1a1a1a; --panel: #2a2a2a; --accent: #4CAF50; --danger: #f44336; --warn: #ff9800; --text: #eee; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        .ui-panel { background: var(--panel-bg); padding: 15px; border-bottom: 2px solid #444; display: flex; gap: 20px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        textarea { flex: 1; height: 110px; background: #111; color: #0f0; border: 1px solid #555; padding: 10px; font-family: 'Consolas', monospace; font-size: 12px; border-radius: 4px; resize: none; }
+        .ui-panel { background: var(--panel); padding: 15px; border-bottom: 2px solid #444; display: flex; flex-direction: column; gap: 10px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .top-row { display: flex; gap: 15px; align-items: center; }
+        textarea { flex: 1; height: 80px; background: #111; color: #0f0; border: 1px solid #555; padding: 10px; font-family: 'Consolas', monospace; font-size: 12px; border-radius: 4px; resize: none; }
         
-        .controls { display: flex; flex-direction: column; gap: 8px; min-width: 360px; }
-        button { padding: 8px; border: none; cursor: pointer; font-weight: bold; border-radius: 4px; color: white; transition: filter 0.2s; }
+        .controls { display: flex; flex-direction: column; gap: 8px; min-width: 250px; }
+        button { padding: 8px 12px; border: none; cursor: pointer; font-weight: bold; border-radius: 4px; color: white; transition: filter 0.2s; }
         button:hover { filter: brightness(1.2); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        #renderBtn { background: var(--accent); font-size: 14px; margin-bottom: 5px; }
-        .preset-row { display: flex; gap: 5px; }
-        #saveBtn { background: var(--save-gold); flex: 1; }
-        #snapBtn { background: var(--snap-blue); flex: 2; }
-
-        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: #222; padding: 10px; border-radius: 4px; border: 1px solid #444; margin-top: 5px; }
-        .slider-box { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #aaa; }
-        .check-row { grid-column: span 2; display: flex; justify-content: space-between; font-size: 11px; align-items: center; border-top: 1px solid #333; pt: 5px; margin-top: 5px; padding-top: 5px;}
+        #renderBtn { background: var(--accent); }
+        #exportBtn { background: #2196F3; }
         
-        #formatSelect { background: #444; color: white; border: 1px solid #666; padding: 4px; border-radius: 4px; margin-bottom: 5px; cursor: pointer; }
+        .editor-tools { display: flex; gap: 10px; align-items: center; background: #333; padding: 10px; border-radius: 6px; border: 1px solid #555; }
+        .tool-group { display: flex; gap: 5px; border-right: 2px solid #555; padding-right: 15px; margin-right: 5px; }
+        .status { font-size: 14px; font-weight: bold; color: #ffeb3b; min-width: 150px; }
+        
+        .btn-add { background: #8BC34A; }
+        .btn-del { background: var(--danger); }
+        .btn-conv { background: var(--warn); }
 
         #viewport-container { flex: 1; position: relative; background: #000; overflow: hidden; }
-        canvas { display: block; cursor: crosshair; }
+        canvas { display: block; cursor: crosshair; outline: none; }
         
-        #coord-hud { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.85); color: #0f0; padding: 15px; border-radius: 8px; border: 1px solid #444; font-family: monospace; font-size: 12px; pointer-events: none; }
-        .hud-line { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 4px; }
+        .instructions { font-size: 11px; color: #aaa; margin-top: 5px; }
     </style>
 </head>
 <body>
 
     <div class="ui-panel">
-        <textarea id="codeInput" placeholder="// Paste Code/JSON here..."></textarea>
-        
-        <div class="controls">
-            <select id="formatSelect">
-                <option value="as3">Format: AS3 Vector.<Tile></option>
-                <option value="json">Format: JSON (Nodes/Points)</option>
-            </select>
-            <button id="renderBtn">RENDER TILES</button>
-            
-            <div class="preset-row">
-                <button id="saveBtn" title="Save current image position">SAVE POS</button>
-                <button id="snapBtn">SNAP TO SAVED: (<span id="savedDisplay">-55.82, -404.67</span>)</button>
-            </div>
-
-            <div class="settings-grid">
-                <div class="slider-box"><span>Alpha</span><input type="range" id="imgAlpha" min="0" max="1" step="0.05" value="0.5"></div>
-                <div class="slider-box"><span>Scale</span><input type="range" id="imgScale" min="0.01" max="10" step="0.01" value="1"></div>
-                
-                <div class="check-row">
-                    <label><input type="checkbox" id="gridToggle" checked> Grid</label>
-                    <label title="Auto-snap on render"><input type="checkbox" id="autoSnapOnRender" checked> Auto-Snap</label>
-                    <input type="file" id="imageLoader" accept="image/*" style="width: 75px;">
-                </div>
+        <div class="top-row">
+            <textarea id="codeInput" placeholder="Paste your AS3 Vector.<Tile> code here..."></textarea>
+            <div class="controls">
+                <button id="renderBtn" onclick="parseCode()">IMPORT MAP CODE</button>
+                <button id="exportBtn" onclick="exportCode()">EXPORT AS3 CODE</button>
             </div>
         </div>
+        
+        <div class="editor-tools">
+            <div class="status" id="selStatus">No Selection</div>
+            
+            <div class="tool-group">
+                <button class="btn-add" onclick="addTile('s')">+ Add Straight</button>
+                <button class="btn-add" onclick="addTile('a')">+ Add Arc</button>
+            </div>
+            
+            <div class="tool-group">
+                <button class="btn-conv" id="btnConv" onclick="convertSelected()" disabled>Convert Type</button>
+                <button class="btn-conv" id="btnFlip" onclick="flipSelectedArc()" disabled>Flip Arc (Reflex)</button>
+            </div>
+            
+            <button class="btn-del" id="btnDel" onclick="deleteSelected()" disabled>Delete Selected</button>
+            
+            <label style="margin-left:auto; font-size: 12px; display:flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="snapNodes" checked> Snap Nodes (15px)
+            </label>
+        </div>
+        <div class="instructions">Controls: Drag Background to Pan | Scroll to Zoom | Click a line to select it | Click & Drag colored dots to move endpoints.</div>
     </div>
     
-    <div id="viewport-container">
-        <canvas id="tileCanvas"></canvas>
-        <div id="coord-hud">
-            <div class="hud-line"><span>MOUSE X:</span> <span id="mX">0.00</span></div>
-            <div class="hud-line"><span>MOUSE Y:</span> <span id="mY">0.00</span></div>
-            <div style="color: #00bcff; border-top: 1px solid #444; margin-top: 8px; padding-top: 8px;">
-                <div class="hud-line"><span>IMG X:</span> <span id="imgX">-55.82</span></div>
-                <div class="hud-line"><span>IMG Y:</span> <span id="imgY">-404.67</span></div>
-                <div class="hud-line" style="color: #c9a01c; font-size: 10px;"><span>SAVED:</span> <span id="savedVal">-55.82, -404.67</span></div>
-            </div>
-        </div>
-    </div>
+    <div id="viewport-container"><canvas id="editorCanvas" tabindex="1"></canvas></div>
 
 <script>
-const canvas = document.getElementById('tileCanvas');
+const canvas = document.getElementById('editorCanvas');
 const ctx = canvas.getContext('2d');
-const hud = { 
-    mx: document.getElementById('mX'), my: document.getElementById('mY'), 
-    ix: document.getElementById('imgX'), iy: document.getElementById('imgY'),
-    saved: document.getElementById('savedVal'), display: document.getElementById('savedDisplay')
-};
 
 let tiles = [];
-let camera = { x: 0, y: 0, zoom: 1 };
-let overlayImg = null;
-let imgOffset = { x: -55.82, y: -404.67 };
-let savedOffset = { x: -55.82, y: -404.67 };
+let camera = { x: 300, y: 300, zoom: 0.8 };
+let interaction = { mode: null, tileIndex: -1, pointKey: null, lastP: {x:0, y:0} };
 
+// ---------------------------------------------------------
+// UI & State Management
+// ---------------------------------------------------------
+function updateUI() {
+    const idx = interaction.tileIndex;
+    const hasSel = idx !== -1 && tiles[idx];
+    
+    document.getElementById('selStatus').innerText = hasSel ? `Selected: Tile #${idx} (${tiles[idx].type === 's' ? 'Straight' : 'Arc'})` : "No Selection";
+    document.getElementById('selStatus').style.color = hasSel ? '#ffeb3b' : '#888';
+    
+    document.getElementById('btnDel').disabled = !hasSel;
+    document.getElementById('btnConv').disabled = !hasSel;
+    
+    const isArc = hasSel && tiles[idx].type === 'a';
+    document.getElementById('btnFlip').disabled = !isArc;
+}
+
+// ---------------------------------------------------------
+// Tool Functions
+// ---------------------------------------------------------
+function addTile(type) {
+    // Determine screen center for placement
+    const cx = (canvas.width / 2 - camera.x) / camera.zoom;
+    const cy = (canvas.height / 2 - camera.y) / camera.zoom;
+    const size = 100;
+    
+    // Default metadata template
+    const template = { nextTiles: "Vector.<int>([])", trans: "0", layer: "0" };
+
+    if (type === 's') {
+        tiles.push({ ...template, type: 's', pts: [{x: cx - size, y: cy}, {x: cx + size, y: cy}] });
+    } else {
+        tiles.push({ ...template, type: 'a', c: {x: cx, y: cy - size}, s: {x: cx - size, y: cy}, e: {x: cx + size, y: cy}, r: false });
+    }
+    
+    interaction.tileIndex = tiles.length - 1;
+    updateUI(); draw();
+}
+
+function deleteSelected() {
+    if (interaction.tileIndex === -1) return;
+    tiles.splice(interaction.tileIndex, 1);
+    interaction.tileIndex = -1;
+    updateUI(); draw();
+}
+
+function convertSelected() {
+    const idx = interaction.tileIndex;
+    if (idx === -1) return;
+    let t = tiles[idx];
+    
+    if (t.type === 's') {
+        t.type = 'a';
+        t.s = t.pts[0]; t.e = t.pts[t.pts.length-1];
+        delete t.pts;
+        t.c = { x: (t.s.x + t.e.x)/2 + 50, y: (t.s.y + t.e.y)/2 - 50 }; // Guess a center
+        t.r = false;
+    } else {
+        t.type = 's';
+        t.pts = [t.s, t.e];
+        delete t.c; delete t.s; delete t.e; delete t.r;
+    }
+    updateUI(); draw();
+}
+
+function flipSelectedArc() {
+    const idx = interaction.tileIndex;
+    if (idx !== -1 && tiles[idx].type === 'a') {
+        tiles[idx].r = !tiles[idx].r;
+        draw();
+    }
+}
+
+// ---------------------------------------------------------
+// Drawing Logic
+// ---------------------------------------------------------
 function draw() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    ctx.translate(canvas.width / 2 + camera.x, canvas.height / 2 + camera.y);
+    ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
-    if (overlayImg && overlayImg.complete) {
-        ctx.save();
-        ctx.globalAlpha = document.getElementById('imgAlpha').value;
-        const s = parseFloat(document.getElementById('imgScale').value);
-        ctx.translate(-imgOffset.x, -imgOffset.y);
-        ctx.scale(s, s);
-        ctx.drawImage(overlayImg, -overlayImg.width/2, -overlayImg.height/2);
-        ctx.restore();
+    // Draw grid
+    ctx.strokeStyle = "#333"; ctx.lineWidth = 1/camera.zoom;
+    for(let i = -3000; i <= 3000; i += 100) {
+        ctx.beginPath(); ctx.moveTo(i, -3000); ctx.lineTo(i, 3000); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-3000, i); ctx.lineTo(3000, i); ctx.stroke();
     }
 
-    if (document.getElementById('gridToggle').checked) {
-        const range = 5000, step = 100;
-        ctx.strokeStyle = "#333"; ctx.lineWidth = 1/camera.zoom;
-        for(let i = -range; i <= range; i += step) {
-            ctx.beginPath(); ctx.moveTo(i, -range); ctx.lineTo(i, range); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(-range, i); ctx.lineTo(range, i); ctx.stroke();
-        }
-        ctx.strokeStyle = "#ff444455"; ctx.beginPath(); ctx.moveTo(0,-range); ctx.lineTo(0,range); ctx.stroke();
-        ctx.strokeStyle = "#4444ff55"; ctx.beginPath(); ctx.moveTo(-range,0); ctx.lineTo(range,0); ctx.stroke();
-    }
+    const hitRadius = 8 / camera.zoom;
 
     tiles.forEach((t, i) => {
-        ctx.strokeStyle = `hsl(${(i * 55) % 360}, 85%, 65%)`;
-        ctx.lineWidth = 4 / camera.zoom;
+        const isSelected = (i === interaction.tileIndex);
+        
+        // 1. Draw Paths
+        ctx.strokeStyle = isSelected ? '#ffffff' : `hsl(${(i * 45) % 360}, 80%, 60%)`;
+        ctx.lineWidth = isSelected ? 8 : 5;
         ctx.lineCap = "round"; ctx.lineJoin = "round";
         
-        if (t.type === 's') { // Straight Line or Polyline
-            ctx.beginPath();
-            ctx.moveTo(t.pts[0].x, t.pts[0].y);
-            for(let p=1; p<t.pts.length; p++) ctx.lineTo(t.pts[p].x, t.pts[p].y);
-            ctx.stroke();
-        } else if (t.type === 'a') { // Arc
+        if (t.type === 's') { 
+            ctx.beginPath(); ctx.moveTo(t.pts[0].x, t.pts[0].y);
+            ctx.lineTo(t.pts[1].x, t.pts[1].y); ctx.stroke();
+        } else if (t.type === 'a') { 
             const rad = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
             const sa = Math.atan2(t.s.y - t.c.y, t.s.x - t.c.x);
             const ea = Math.atan2(t.e.y - t.c.y, t.e.x - t.c.x);
             let diff = (ea - sa) % (Math.PI * 2); if (diff < 0) diff += Math.PI * 2;
             ctx.beginPath(); ctx.arc(t.c.x, t.c.y, rad, sa, ea, (t.r !== (diff > Math.PI))); ctx.stroke();
+            
+            // Faint radius lines for selected arcs
+            if (isSelected) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2 / camera.zoom;
+                ctx.beginPath(); ctx.moveTo(t.c.x, t.c.y); ctx.lineTo(t.s.x, t.s.y); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(t.c.x, t.c.y); ctx.lineTo(t.e.x, t.e.y); ctx.stroke();
+            }
+        }
+
+        // 2. Draw Nodes (Only prominent if selected or hovering)
+        if (isSelected) {
+            const drawH = (x, y, color) => { 
+                ctx.fillStyle = color; 
+                ctx.fillRect(x - hitRadius, y - hitRadius, hitRadius*2, hitRadius*2); 
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1/camera.zoom;
+                ctx.strokeRect(x - hitRadius, y - hitRadius, hitRadius*2, hitRadius*2); 
+            };
+            
+            if (t.type === 's') {
+                drawH(t.pts[0].x, t.pts[0].y, '#f44336'); // Red Start
+                drawH(t.pts[1].x, t.pts[1].y, '#f44336'); // Red End
+            } else {
+                drawH(t.c.x, t.c.y, '#2196F3'); // Blue Center
+                drawH(t.s.x, t.s.y, '#f44336'); // Red Start
+                drawH(t.e.x, t.e.y, '#f44336'); // Red End
+            }
         }
     });
 }
 
-document.getElementById('renderBtn').onclick = () => {
-    const rawText = document.getElementById('codeInput').value;
-    const format = document.getElementById('formatSelect').value;
-    tiles = [];
+// ---------------------------------------------------------
+// Mouse Interaction Logic
+// ---------------------------------------------------------
+canvas.onmousedown = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - camera.x) / camera.zoom;
+    const my = (e.clientY - rect.top - camera.y) / camera.zoom;
+    const hitR = 12 / camera.zoom; // Click tolerance
 
-    try {
-        if (format === "json") {
-            const data = JSON.parse(rawText);
-            if (data.Nodes) {
-                data.Nodes.forEach(node => {
-                    const pts = node.Points.map(p => ({ x: p[0], y: p[1] }));
-                    if (pts.length >= 2) tiles.push({ type: 's', pts: pts });
-                });
-            }
-        } else {
-            const chunks = rawText.split(/new\s+(StraightTile|ArcTile)/g);
-            for (let i = 1; i < chunks.length; i += 2) {
-                const type = chunks[i], content = chunks[i+1];
-                const vecRegex = /Vector2\s*\(\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)/g;
-                const pts = []; let m;
-                while ((m = vecRegex.exec(content)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
-                if (type === "StraightTile" && pts.length >= 2) tiles.push({ type:'s', pts: [pts[0], pts[1]] });
-                else if (type === "ArcTile" && pts.length >= 3) tiles.push({ type:'a', c:pts[0], s:pts[1], e:pts[2], r:content.toLowerCase().includes("reflex(true)") });
+    interaction.mode = null;
+
+    // 1. Check for Node Handles (Only if a tile is already selected)
+    if (interaction.tileIndex !== -1) {
+        const t = tiles[interaction.tileIndex];
+        const pts = t.type === 's' ? { p0: t.pts[0], p1: t.pts[1] } : { c: t.c, s: t.s, e: t.e };
+        for (let key in pts) {
+            if (Math.hypot(pts[key].x - mx, pts[key].y - my) < hitR) {
+                interaction.mode = 'NODE';
+                interaction.pointKey = key;
+                return; // Stop searching, we grabbed a node
             }
         }
-    } catch (e) { alert("Parsing Error: " + e.message); }
+    }
 
-    if (document.getElementById('autoSnapOnRender').checked) imgOffset = { ...savedOffset };
-    draw();
-};
+    // 2. Check for Path Selection
+    let newSelection = -1;
+    for (let i = tiles.length - 1; i >= 0; i--) {
+        const t = tiles[i];
+        if (t.type === 's') {
+            // Distance to line segment
+            const l2 = Math.pow(t.pts[0].x - t.pts[1].x, 2) + Math.pow(t.pts[0].y - t.pts[1].y, 2);
+            let t_val = ((mx - t.pts[0].x) * (t.pts[1].x - t.pts[0].x) + (my - t.pts[0].y) * (t.pts[1].y - t.pts[0].y)) / l2;
+            t_val = Math.max(0, Math.min(1, t_val));
+            const px = t.pts[0].x + t_val * (t.pts[1].x - t.pts[0].x);
+            const py = t.pts[0].y + t_val * (t.pts[1].y - t.pts[0].y);
+            if (Math.hypot(px - mx, py - my) < hitR) { newSelection = i; break; }
+        } else if (t.type === 'a') {
+            const r = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
+            const distToCenter = Math.hypot(mx - t.c.x, my - t.c.y);
+            if (Math.abs(distToCenter - r) < hitR) { newSelection = i; break; } // Roughly touching the arc outline
+        }
+    }
 
-// ... Rest of your UI logic (Save, Snap, Image Loading, Mouse handling) remains the same ...
-document.getElementById('saveBtn').onclick = () => {
-    savedOffset = { ...imgOffset };
-    const str = `${savedOffset.x.toFixed(2)}, ${savedOffset.y.toFixed(2)}`;
-    hud.saved.innerText = str; hud.display.innerText = str;
-};
-document.getElementById('snapBtn').onclick = () => { imgOffset = { ...savedOffset }; draw(); };
-document.getElementById('imageLoader').onchange = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const url = URL.createObjectURL(file);
-    const tempImg = new Image();
-    tempImg.onload = () => { overlayImg = tempImg; draw(); URL.revokeObjectURL(url); };
-    tempImg.src = url;
-};
-['imgAlpha', 'imgScale', 'gridToggle'].forEach(id => document.getElementById(id).oninput = draw);
-let isDown = false, lastP = {x:0, y:0};
-canvas.onmousedown = (e) => { isDown = true; lastP = {x:e.clientX, y:e.clientY}; };
-window.onmouseup = () => isDown = false;
-canvas.onmousemove = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const wx = (e.clientX - rect.left - canvas.width/2 - camera.x) / camera.zoom;
-    const wy = (e.clientY - rect.top - canvas.height/2 - camera.y) / camera.zoom;
-    hud.mx.innerText = wx.toFixed(2); hud.my.innerText = wy.toFixed(2);
-    hud.ix.innerText = imgOffset.x.toFixed(2); hud.iy.innerText = imgOffset.y.toFixed(2);
-    if (isDown) {
-        const dx = e.clientX - lastP.x, dy = e.clientY - lastP.y;
-        if (e.shiftKey) { imgOffset.x -= dx/camera.zoom; imgOffset.y -= dy/camera.zoom; }
-        else { camera.x += dx; camera.y += dy; }
-        lastP = {x:e.clientX, y:e.clientY}; draw();
+    if (newSelection !== -1) {
+        interaction.tileIndex = newSelection;
+        updateUI(); draw();
+    } else {
+        // 3. Pan Background
+        interaction.mode = 'PAN';
+        interaction.lastP = { x: e.clientX, y: e.clientY };
+        interaction.tileIndex = -1; // Deselect
+        updateUI(); draw();
     }
 };
+
+window.onmousemove = (e) => {
+    if (interaction.mode === 'NODE' && interaction.tileIndex !== -1) {
+        const rect = canvas.getBoundingClientRect();
+        let nx = (e.clientX - rect.left - camera.x) / camera.zoom;
+        let ny = (e.clientY - rect.top - camera.y) / camera.zoom;
+        
+        // Node Snapping Logic
+        if (document.getElementById('snapNodes').checked && interaction.pointKey !== 'c') {
+            const snapR = 15 / camera.zoom;
+            for (let i = 0; i < tiles.length; i++) {
+                if (i === interaction.tileIndex) continue;
+                const other = tiles[i];
+                const opts = other.type === 's' ? [other.pts[0], other.pts[1]] : [other.s, other.e];
+                for (let op of opts) {
+                    if (Math.hypot(op.x - nx, op.y - ny) < snapR) { nx = op.x; ny = op.y; break; }
+                }
+            }
+        }
+
+        const t = tiles[interaction.tileIndex];
+        if (t.type === 's') t.pts[interaction.pointKey === 'p0' ? 0 : 1] = {x: nx, y: ny};
+        else t[interaction.pointKey] = {x: nx, y: ny};
+        draw();
+    } else if (interaction.mode === 'PAN') {
+        camera.x += (e.clientX - interaction.lastP.x);
+        camera.y += (e.clientY - interaction.lastP.y);
+        interaction.lastP = { x: e.clientX, y: e.clientY };
+        draw();
+    }
+};
+
+window.onmouseup = () => interaction.mode = null;
+
+// Hotkey delete
+canvas.addEventListener('keydown', (e) => {
+    if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelected(); }
+});
+
 canvas.onwheel = (e) => { camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1); draw(); e.preventDefault(); };
-window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 140; draw(); };
+
+// ---------------------------------------------------------
+// Importer / Exporter (Preserves AS3 formatting)
+// ---------------------------------------------------------
+const getVec = (block, key) => {
+    const regex = new RegExp(key + "\\s*\\(\\s*new\\s+Vector2\\s*\\(\\s*(-?\\d+\\.?\\d*)\\s*,\\s*(-?\\d+\\.?\\d*)\\s*\\)", "i");
+    const match = block.match(regex);
+    return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : null;
+};
+
+function parseCode() {
+    const raw = document.getElementById('codeInput').value;
+    tiles = []; interaction.tileIndex = -1; updateUI();
+    const chunks = raw.split(/new\s+(StraightTile|ArcTile)/g);
+    
+    for (let i = 1; i < chunks.length; i += 2) {
+        const type = chunks[i], content = chunks[i+1];
+        const nextM = content.match(/\.ini_nextTileIndices\((Vector\.<int>\(\[.*?\]\))\)/) || content.match(/\.ini_nextTileIndices\((.*?)\)/);
+        const transM = content.match(/\.ini_transitionType\((\d+)\)/);
+        const layerM = content.match(/\.ini_layer\((\d+)\)/);
+        
+        let md = { nextTiles: nextM ? nextM[1] : "Vector.<int>([])", trans: transM ? transM[1] : "0", layer: layerM ? layerM[1] : "0" };
+
+        if (type === "StraightTile") {
+            const s = getVec(content, "ini_startPoint"), e = getVec(content, "ini_endPoint");
+            if (s && e) tiles.push({ ...md, type: 's', pts: [s, e] });
+        } else if (type === "ArcTile") {
+            const c = getVec(content, "ini_baseCentre"), s = getVec(content, "ini_baseStart"), e = getVec(content, "ini_baseEnd");
+            const r = content.toLowerCase().includes("reflex(true)");
+            if (c && s && e) tiles.push({ ...md, type: 'a', c, s, e, r });
+        }
+    }
+    draw();
+}
+
+function exportCode() {
+    const out = tiles.map(t => {
+        let str = t.type === 's' 
+            ? `new StraightTile().ini_startPoint(new Vector2(${t.pts[0].x.toFixed(2)},${t.pts[0].y.toFixed(2)})).ini_endPoint(new Vector2(${t.pts[1].x.toFixed(2)},${t.pts[1].y.toFixed(2)}))`
+            : `new ArcTile().ini_baseCentre(new Vector2(${t.c.x.toFixed(2)},${t.c.y.toFixed(2)})).ini_baseStart(new Vector2(${t.s.x.toFixed(2)},${t.s.y.toFixed(2)})).ini_baseEnd(new Vector2(${t.e.x.toFixed(2)},${t.e.y.toFixed(2)})).ini_reflex(${t.r})`;
+        return str + `.ini_nextTileIndices(${t.nextTiles}).ini_transitionType(${t.trans}).ini_layer(${t.layer})`;
+    });
+    document.getElementById('codeInput').value = `tileSets = Vector.<Vector.<Tile>>([Vector.<Tile>([${out.join(",")}])]);`;
+}
+
+window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 180; draw(); };
 window.onresize();
 </script>
 </body>
