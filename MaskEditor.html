@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Mask Editor (720x500)</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-bg: #2a2a2a;
+            --text-color: #eee;
+            --border-color: #444;
+            --accent: #4CAF50;
+            --blue-btn: #2196F3;
+            --red-btn: #f44336;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 260px;
+            background-color: var(--panel-bg);
+            border-right: 2px solid var(--border-color);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        h2 { margin: 0 0 5px 0; font-size: 16px; color: #fff; border-bottom: 1px solid #444; padding-bottom: 3px; }
+
+        .tool-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        button {
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1;
+            min-width: 45%;
+            font-weight: bold;
+            transition: 0.2s;
+            font-size: 13px;
+        }
+
+        button:hover { background-color: #444; }
+        button.active { background-color: var(--accent); border-color: #81c784; }
+
+        .action-btn {
+            width: 100%;
+            margin-top: 2px;
+        }
+        #loadBtn { background-color: var(--blue-btn); }
+        #downloadBtn { background-color: var(--accent); }
+        #clearBtn { background-color: var(--red-btn); }
+
+        .color-palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .color-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .color-swatch:hover { transform: scale(1.1); }
+        .color-swatch.active { border-color: white; outline: 2px solid var(--accent); }
+
+        #customColor {
+            width: 100%;
+            height: 35px;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+
+        #workspace {
+            flex: 1;
+            position: relative;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            width: 720px;
+            height: 500px;
+            box-shadow: 0 0 25px rgba(0,0,0,0.9);
+            /* Checkerboard pattern for transparent areas */
+            background-image: linear-gradient(45deg, #222 25%, transparent 25%), 
+                              linear-gradient(-45deg, #222 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #222 75%), 
+                              linear-gradient(-45deg, transparent 75%, #222 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 720px;
+            height: 500px;
+        }
+
+        #gridCanvas { pointer-events: none; opacity: 0.7; z-index: 4; }
+        #previewCanvas { pointer-events: none; z-index: 3; }
+        #paintCanvas { z-index: 2; cursor: crosshair; }
+        #bgCanvas { pointer-events: none; z-index: 1; }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+        }
+        
+        input[type="range"] { flex: 1; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div>
+            <h2>File Actions</h2>
+            <button id="loadBtn" class="action-btn" onclick="document.getElementById('imageLoader').click()">Select Map Image</button>
+            <input type="file" id="imageLoader" accept="image/*" style="display:none;">
+            
+            <button id="downloadBtn" class="action-btn" style="margin-top: 8px;">Download Mask File</button>
+        </div>
+
+        <div>
+            <h2>Tools</h2>
+            <div class="tool-section">
+                <button class="tool-btn active" data-tool="brush">Brush</button>
+                <button class="tool-btn" data-tool="line">Line</button>
+                <button class="tool-btn" data-tool="fill">Bucket</button>
+                <button class="tool-btn" data-tool="eraser">Eraser</button>
+            </div>
+        </div>
+
+        <div>
+            <h2>Brush Size: <span id="sizeLabel">6</span>px</h2>
+            <div class="control-group">
+                <input type="range" id="brushSize" min="1" max="50" value="6">
+            </div>
+        </div>
+
+        <div>
+            <h2>Grid & Display</h2>
+            <div class="control-group">
+                <label><input type="checkbox" id="toggleGrid" checked> Show Grid & Numbers</label>
+            </div>
+            <button id="clearBtn" class="action-btn" style="margin-top: 8px;">Clear Mask Canvas</button>
+        </div>
+
+        <div>
+            <h2>Mask Colors</h2>
+            <div class="color-palette" id="palette">
+                <div class="color-swatch active" style="background-color: #d536f9;" data-color="#d536f9" title="Neon Purple"></div>
+                <div class="color-swatch" style="background-color: #2dd5e8;" data-color="#2dd5e8" title="Cyan"></div>
+                <div class="color-swatch" style="background-color: #b6f9a1;" data-color="#b6f9a1" title="Pale Green"></div>
+                <div class="color-swatch" style="background-color: #fbfbe0;" data-color="#fbfbe0" title="Pale Yellow"></div>
+                <div class="color-swatch" style="background-color: #f88286;" data-color="#f88286" title="Salmon Pink"></div>
+                <div class="color-swatch" style="background-color: #000000;" data-color="#000000" title="Black"></div>
+                <div class="color-swatch" style="background-color: #ffffff;" data-color="#ffffff" title="White"></div>
+                <div class="color-swatch" style="background-color: #6ef3bc;" data-color="#6ef3bc" title="Mint Green"></div>
+                <div class="color-swatch" style="background-color: #9c008c;" data-color="#9c008c" title="Deep Purple"></div>
+                <div class="color-swatch" style="background-color: #797979;" data-color="#797979" title="Gray"></div>
+                <div class="color-swatch" style="background-color: #f9c85f;" data-color="#f9c85f" title="Gold"></div>
+            </div>
+            <h2 style="margin-top: 12px;">Custom Picker</h2>
+            <input type="color" id="customColor" value="#d536f9">
+        </div>
+    </div>
+
+    <div id="workspace">
+        <div class="canvas-wrapper">
+            <canvas id="bgCanvas" width="720" height="500"></canvas>
+            <canvas id="paintCanvas" width="720" height="500"></canvas>
+            <canvas id="previewCanvas" width="720" height="500"></canvas>
+            <canvas id="gridCanvas" width="720" height="500"></canvas>
+        </div>
+    </div>
+
+<script>
+    // Canvas References
+    const bgCanvas = document.getElementById('bgCanvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    const paintCanvas = document.getElementById('paintCanvas');
+    const paintCtx = paintCanvas.getContext('2d', { willReadFrequently: true });
+    const previewCanvas = document.getElementById('previewCanvas');
+    const previewCtx = previewCanvas.getContext('2d');
+    const gridCanvas = document.getElementById('gridCanvas');
+    const gridCtx = gridCanvas.getContext('2d');
+
+    // Editor Configuration
+    let currentTool = 'brush';
+    let currentColor = '#d536f9';
+    let brushSize = 6;
+    let isDrawing = false;
+    let startX = 0;
+    let startY = 0;
+    let showGrid = true;
+
+    // DOM Bindings
+    const toolBtns = document.querySelectorAll('.tool-btn');
+    const swatches = document.querySelectorAll('.color-swatch');
+    const customColorInput = document.getElementById('customColor');
+    const brushSizeInput = document.getElementById('brushSize');
+    const sizeLabel = document.getElementById('sizeLabel');
+    const toggleGridBox = document.getElementById('toggleGrid');
+    const clearBtn = document.getElementById('clearBtn');
+    const imageLoader = document.getElementById('imageLoader');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    // --- Render Grid Layer (720x500 Grid Coordinates) ---
+    function drawGrid() {
+        gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+        if (!showGrid) return;
+
+        const interval = 50;
+        gridCtx.lineWidth = 1;
+        gridCtx.font = "bold 10px monospace";
+        
+        // Draw Vertical Grid Lines & X Numbers
+        for (let x = 0; x <= gridCanvas.width; x += interval) {
+            gridCtx.strokeStyle = (x % 100 === 0) ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.15)";
+            gridCtx.beginPath();
+            gridCtx.moveTo(x, 0);
+            gridCtx.lineTo(x, gridCanvas.height);
+            gridCtx.stroke();
+            
+            if (x >= 0 && x < gridCanvas.width) {
+                gridCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+                gridCtx.fillText(x, x + 3, 12);
+            }
+        }
+
+        // Draw Horizontal Grid Lines & Y Numbers
+        for (let y = 0; y <= gridCanvas.height; y += interval) {
+            gridCtx.strokeStyle = (y % 100 === 0) ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.15)";
+            gridCtx.beginPath();
+            gridCtx.moveTo(0, y);
+            gridCtx.lineTo(gridCanvas.width, y);
+            gridCtx.stroke();
+            
+            if (y > 0 && y < gridCanvas.height) {
+                gridCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+                gridCtx.fillText(y, 3, y - 3);
+            }
+        }
+    }
+    drawGrid(); // Initialize Grid on startup
+
+    // --- Background Image Loader ---
+    imageLoader.addEventListener('change', (e) => {
+        if (!e.target.files.length) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+                // Fits/stretches structural map cleanly into the 720x500 operational zone
+                bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
+            }
+            img.src = event.target.result;
+        }
+        reader.readAsDataURL(e.target.files[0]);
+    });
+
+    // --- Export / Download Mask (Standalone pure PNG output) ---
+    downloadBtn.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'custom_map_mask.png';
+        link.href = paintCanvas.toDataURL('image/png');
+        link.click();
+    });
+
+    // --- UI Controls / Configuration Management ---
+    toolBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            toolBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTool = btn.dataset.tool;
+        });
+    });
+
+    function updateActiveColor(color, element) {
+        currentColor = color;
+        customColorInput.value = color;
+        swatches.forEach(s => s.classList.remove('active'));
+        if (element) element.classList.add('active');
+    }
+
+    swatches.forEach(swatch => {
+        swatch.addEventListener('click', (e) => {
+            updateActiveColor(swatch.dataset.color, e.target);
+        });
+    });
+
+    customColorInput.addEventListener('input', (e) => {
+        updateActiveColor(e.target.value, null);
+    });
+
+    brushSizeInput.addEventListener('input', (e) => {
+        brushSize = e.target.value;
+        sizeLabel.innerText = brushSize;
+    });
+
+    toggleGridBox.addEventListener('change', (e) => {
+        showGrid = e.target.checked;
+        drawGrid();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        if(confirm("Clear everything on the current mask?")) {
+            paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+        }
+    });
+
+    // --- Drawing Engine Helpers ---
+    function getCursorCoordinates(evt) {
+        const rect = paintCanvas.getBoundingClientRect();
+        return {
+            x: Math.floor((evt.clientX - rect.left) * (paintCanvas.width / rect.width)),
+            y: Math.floor((evt.clientY - rect.top) * (paintCanvas.height / rect.height))
+        };
+    }
+
+    // --- Mouse Action Listeners ---
+    paintCanvas.addEventListener('mousedown', (e) => {
+        const coords = getCursorCoordinates(e);
+        startX = coords.x;
+        startY = coords.y;
+
+        if (currentTool === 'fill') {
+            floodFill(startX, startY, hexToRgb(currentColor));
+            return;
+        }
+
+        isDrawing = true;
+        paintCtx.beginPath();
+        paintCtx.moveTo(startX, startY);
+        paintCtx.lineCap = 'round';
+        paintCtx.lineJoin = 'round';
+        
+        if (currentTool === 'brush') {
+            paintCtx.globalCompositeOperation = 'source-over';
+            paintCtx.strokeStyle = currentColor;
+            paintCtx.lineWidth = brushSize;
+            paintCtx.lineTo(startX, startY);
+            paintCtx.stroke();
+        } else if (currentTool === 'eraser') {
+            paintCtx.globalCompositeOperation = 'destination-out';
+            paintCtx.lineWidth = brushSize;
+            paintCtx.lineTo(startX, startY);
+            paintCtx.stroke();
+        }
+    });
+
+    paintCanvas.addEventListener('mousemove', (e) => {
+        if (!isDrawing) return;
+        const coords = getCursorCoordinates(e);
+
+        if (currentTool === 'brush' || currentTool === 'eraser') {
+            paintCtx.lineTo(coords.x, coords.y);
+            paintCtx.stroke();
+        } else if (currentTool === 'line') {
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            previewCtx.beginPath();
+            previewCtx.moveTo(startX, startY);
+            previewCtx.lineTo(coords.x, coords.y);
+            previewCtx.strokeStyle = currentColor;
+            previewCtx.lineWidth = brushSize;
+            previewCtx.lineCap = 'round';
+            previewCtx.stroke();
+        }
+    });
+
+    paintCanvas.addEventListener('mouseup', (e) => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        
+        if (currentTool === 'line') {
+            const coords = getCursorCoordinates(e);
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            
+            paintCtx.globalCompositeOperation = 'source-over';
+            paintCtx.beginPath();
+            paintCtx.moveTo(startX, startY);
+            paintCtx.lineTo(coords.x, coords.y);
+            paintCtx.strokeStyle = currentColor;
+            paintCtx.lineWidth = brushSize;
+            paintCtx.lineCap = 'round';
+            paintCtx.stroke();
+        }
+    });
+
+    paintCanvas.addEventListener('mouseleave', () => {
+        if (isDrawing && currentTool === 'line') {
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        }
+        isDrawing = false;
+    });
+
+    // --- Flood Fill Algorithm Logic ---
+    function hexToRgb(hex) {
+        const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return match ? { r: parseInt(match[1], 16), g: parseInt(match[2], 16), b: parseInt(match[3], 16), a: 255 } : null;
+    }
+
+    function floodFill(startX, startY, targetFillColor) {
+        const canvasMap = paintCtx.getImageData(0, 0, paintCanvas.width, paintCanvas.height);
+        const data = canvasMap.data;
+        const width = canvasMap.width;
+        const height = canvasMap.height;
+        
+        const originIndex = (startY * width + startX) * 4;
+        const seedColor = {
+            r: data[originIndex],
+            g: data[originIndex + 1],
+            b: data[originIndex + 2],
+            a: data[originIndex + 3]
+        };
+
+        if (seedColor.r === targetFillColor.r && seedColor.g === targetFillColor.g && 
+            seedColor.b === targetFillColor.b && seedColor.a === targetFillColor.a) {
+            return;
+        }
+
+        const matchColor = (index) => {
+            return data[index] === seedColor.r && data[index + 1] === seedColor.g &&
+                   data[index + 2] === seedColor.b && data[index + 3] === seedColor.a;
+        };
+
+        const colorPixel = (index) => {
+            data[index] = targetFillColor.r;
+            data[index + 1] = targetFillColor.g;
+            data[index + 2] = targetFillColor.b;
+            data[index + 3] = targetFillColor.a;
+        };
+
+        const stack = [[startX, startY]];
+
+        while (stack.length) {
+            const currentPoint = stack.pop();
+            let cx = currentPoint[0];
+            let cy = currentPoint[1];
+            let index = (cy * width + cx) * 4;
+
+            while (cy-- >= 0 && matchColor(index)) { index -= width * 4; }
+            index += width * 4;
+            cy++;
+
+            let leftBound = false;
+            let rightBound = false;
+
+            while (cy++ < height - 1 && matchColor(index)) {
+                colorPixel(index);
+
+                if (cx > 0) {
+                    if (matchColor(index - 4)) {
+                        if (!leftBound) { stack.push([cx - 1, cy]); leftBound = true; }
+                    } else if (leftBound) { leftBound = false; }
+                }
+
+                if (cx < width - 1) {
+                    if (matchColor(index + 4)) {
+                        if (!rightBound) { stack.push([cx + 1, cy]); rightBound = true; }
+                    } else if (rightBound) { rightBound = false; }
+                }
+                index += width * 4;
+            }
+        }
+        paintCtx.putImageData(canvasMap, 0, 0);
+    }
+</script>
+</body>
+</html>
