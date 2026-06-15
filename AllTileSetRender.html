@@ -348,7 +348,7 @@ function exportCode() {
     const out = tiles.map(t => {
         let str = t.type === 's' 
             ? `new StraightTile().ini_startPoint(new Vector2(${t.pts[0].x.toFixed(2)},${t.pts[0].y.toFixed(2)})).ini_endPoint(new Vector2(${t.pts[1].x.toFixed(2)},${t.pts[1].y.toFixed(2)}))`
-            : `new ArcTile().ini_baseCentre(new Vector2(${t.c.x.toFixed(2)},${t.c.y.toFixed(2)})).ini_baseStart(new Vector2(${t.s.x.toFixed(2)},${t.s.y.toFixed(2)})).ini_baseEnd(new Vector2(${t.e.x.toFixed(2)},${t.e.y.toFixed(2)})).ini_reflex(${t.r})`;
+            : `new ArcTile().ini_baseCentre(new Vector2(${t.c.x.toFixed(2)},${t.c.y.toFixed(2)})).ini_baseStart(new Vector2(${t.s.x.toFixed(2)},${t.s.y.toFixed(2)})).ini_baseEnd(new Vector2(${t.e.x.toFixed(2)},${t.e.y.toFixed(2)}))`;
         return str + `.ini_nextTileIndices(${t.nextTiles}).ini_transitionType(${t.trans}).ini_layer(${t.layer})`;
     });
     document.getElementById('codeInput').value = `tileSets = Vector.<Vector.<Tile>>([Vector.<Tile>([${out.join(",")}])]);`;
