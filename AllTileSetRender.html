@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Ultimate BTD Map Editor</title>
     <style>
-        :root { --bg: #1a1a1a; --panel: #2a2a2a; --accent: #4CAF50; --danger: #f44336; --warn: #ff9800; --text: #eee; }
+        :root { --bg: #1a1a1a; --panel: #2a2a2a; --accent: #4CAF50; --danger: #f44336; --warn: #ff9800; --text: #eee; --bg-tool: #9c27b0; }
         body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
         .ui-panel { background: var(--panel); padding: 15px; border-bottom: 2px solid #444; display: flex; flex-direction: column; gap: 10px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -19,13 +19,14 @@
         #renderBtn { background: var(--accent); }
         #exportBtn { background: #2196F3; }
         
-        .editor-tools { display: flex; gap: 10px; align-items: center; background: #333; padding: 10px; border-radius: 6px; border: 1px solid #555; }
-        .tool-group { display: flex; gap: 5px; border-right: 2px solid #555; padding-right: 15px; margin-right: 5px; }
+        .editor-tools { display: flex; gap: 10px; align-items: center; background: #333; padding: 10px; border-radius: 6px; border: 1px solid #555; flex-wrap: wrap; }
+        .tool-group { display: flex; gap: 10px; align-items: center; border-right: 2px solid #555; padding-right: 15px; margin-right: 5px; }
         .status { font-size: 14px; font-weight: bold; color: #ffeb3b; min-width: 150px; }
         
         .btn-add { background: #8BC34A; }
         .btn-del { background: var(--danger); }
         .btn-conv { background: var(--warn); }
+        .btn-bg { background: var(--bg-tool); }
 
         #viewport-container { flex: 1; position: relative; background: #000; overflow: hidden; }
         canvas { display: block; cursor: crosshair; outline: none; }
@@ -54,12 +55,20 @@
             
             <div class="tool-group">
                 <button class="btn-conv" id="btnConv" onclick="convertSelected()" disabled>Convert Type</button>
-                <button class="btn-conv" id="btnFlip" onclick="flipSelectedArc()" disabled>Flip Arc (Reflex)</button>
+                <button class="btn-conv" id="btnFlip" onclick="flipSelectedArc()" disabled>Flip Arc</button>
+                <button class="btn-del" id="btnDel" onclick="deleteSelected()" disabled>Delete</button>
+            </div>
+
+            <div class="tool-group" style="background: #444; padding: 5px 15px; border-radius: 4px;">
+                <input type="file" id="bgInput" accept="image/*" style="display:none;">
+                <button class="btn-bg" onclick="document.getElementById('bgInput').click()">Load Image</button>
+                <label style="font-size: 12px; display:flex; align-items:center; gap:5px; cursor:pointer;" title="When checked, dragging moves the background and scrolling resizes it.">
+                    <input type="checkbox" id="editBgMode"> Move/Resize Bg
+                </label>
+                <input type="range" id="bgOpacity" min="0.1" max="1" step="0.1" value="0.7" style="width: 80px;" oninput="draw()" title="Background Opacity">
             </div>
             
-            <button class="btn-del" id="btnDel" onclick="deleteSelected()" disabled>Delete Selected</button>
-            
-            <label style="margin-left:auto; font-size: 12px; display:flex; align-items:center; gap:5px;">
+            <label style="margin-left:auto; font-size: 12px; display:flex; align-items:center; gap:5px; cursor:pointer;">
                 <input type="checkbox" id="snapNodes" checked> Snap Nodes (15px)
             </label>
         </div>
@@ -75,6 +84,29 @@ const ctx = canvas.getContext('2d');
 let tiles = [];
 let camera = { x: 300, y: 300, zoom: 0.8 };
 let interaction = { mode: null, tileIndex: -1, pointKey: null, lastP: {x:0, y:0} };
+
+// Background Image State
+let bgState = { img: null, x: 0, y: 0, scale: 1 };
+
+// Handle Image Upload
+document.getElementById('bgInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+            bgState.img = img;
+            bgState.x = -img.width / 2; // Center the image roughly
+            bgState.y = -img.height / 2;
+            bgState.scale = 1;
+            draw();
+        }
+        img.src = event.target.result;
+    }
+    reader.readAsDataURL(file);
+    e.target.value = ''; // Reset input so you can load the same image again if needed
+});
 
 // ---------------------------------------------------------
 // UI & State Management
@@ -97,12 +129,9 @@ function updateUI() {
 // Tool Functions
 // ---------------------------------------------------------
 function addTile(type) {
-    // Determine screen center for placement
     const cx = (canvas.width / 2 - camera.x) / camera.zoom;
     const cy = (canvas.height / 2 - camera.y) / camera.zoom;
     const size = 100;
-    
-    // Default metadata template
     const template = { nextTiles: "Vector.<int>([])", trans: "0", layer: "0" };
 
     if (type === 's') {
@@ -131,7 +160,7 @@ function convertSelected() {
         t.type = 'a';
         t.s = t.pts[0]; t.e = t.pts[t.pts.length-1];
         delete t.pts;
-        t.c = { x: (t.s.x + t.e.x)/2 + 50, y: (t.s.y + t.e.y)/2 - 50 }; // Guess a center
+        t.c = { x: (t.s.x + t.e.x)/2 + 50, y: (t.s.y + t.e.y)/2 - 50 };
         t.r = false;
     } else {
         t.type = 's';
@@ -159,8 +188,15 @@ function draw() {
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
-    // Draw grid
-    ctx.strokeStyle = "#333"; ctx.lineWidth = 1/camera.zoom;
+    // 1. Draw Background Image
+    if (bgState.img) {
+        ctx.globalAlpha = document.getElementById('bgOpacity').value;
+        ctx.drawImage(bgState.img, bgState.x, bgState.y, bgState.img.width * bgState.scale, bgState.img.height * bgState.scale);
+        ctx.globalAlpha = 1.0;
+    }
+
+    // 2. Draw Grid
+    ctx.strokeStyle = "rgba(51, 51, 51, 0.5)"; ctx.lineWidth = 1/camera.zoom;
     for(let i = -3000; i <= 3000; i += 100) {
         ctx.beginPath(); ctx.moveTo(i, -3000); ctx.lineTo(i, 3000); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(-3000, i); ctx.lineTo(3000, i); ctx.stroke();
@@ -168,10 +204,10 @@ function draw() {
 
     const hitRadius = 8 / camera.zoom;
 
+    // 3. Draw Tiles
     tiles.forEach((t, i) => {
         const isSelected = (i === interaction.tileIndex);
         
-        // 1. Draw Paths
         ctx.strokeStyle = isSelected ? '#ffffff' : `hsl(${(i * 45) % 360}, 80%, 60%)`;
         ctx.lineWidth = isSelected ? 8 : 5;
         ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -186,7 +222,6 @@ function draw() {
             let diff = (ea - sa) % (Math.PI * 2); if (diff < 0) diff += Math.PI * 2;
             ctx.beginPath(); ctx.arc(t.c.x, t.c.y, rad, sa, ea, (t.r !== (diff > Math.PI))); ctx.stroke();
             
-            // Faint radius lines for selected arcs
             if (isSelected) {
                 ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2 / camera.zoom;
                 ctx.beginPath(); ctx.moveTo(t.c.x, t.c.y); ctx.lineTo(t.s.x, t.s.y); ctx.stroke();
@@ -194,7 +229,6 @@ function draw() {
             }
         }
 
-        // 2. Draw Nodes (Only prominent if selected or hovering)
         if (isSelected) {
             const drawH = (x, y, color) => { 
                 ctx.fillStyle = color; 
@@ -204,12 +238,12 @@ function draw() {
             };
             
             if (t.type === 's') {
-                drawH(t.pts[0].x, t.pts[0].y, '#f44336'); // Red Start
-                drawH(t.pts[1].x, t.pts[1].y, '#f44336'); // Red End
+                drawH(t.pts[0].x, t.pts[0].y, '#f44336');
+                drawH(t.pts[1].x, t.pts[1].y, '#f44336');
             } else {
-                drawH(t.c.x, t.c.y, '#2196F3'); // Blue Center
-                drawH(t.s.x, t.s.y, '#f44336'); // Red Start
-                drawH(t.e.x, t.e.y, '#f44336'); // Red End
+                drawH(t.c.x, t.c.y, '#2196F3');
+                drawH(t.s.x, t.s.y, '#f44336');
+                drawH(t.e.x, t.e.y, '#f44336');
             }
         }
     });
@@ -222,11 +256,18 @@ canvas.onmousedown = (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = (e.clientX - rect.left - camera.x) / camera.zoom;
     const my = (e.clientY - rect.top - camera.y) / camera.zoom;
-    const hitR = 12 / camera.zoom; // Click tolerance
+    const hitR = 12 / camera.zoom;
 
     interaction.mode = null;
 
-    // 1. Check for Node Handles (Only if a tile is already selected)
+    // Check Background Edit Mode first
+    if (document.getElementById('editBgMode').checked && bgState.img) {
+        interaction.mode = 'DRAG_BG';
+        interaction.lastP = { x: e.clientX, y: e.clientY };
+        return; 
+    }
+
+    // 1. Check for Node Handles
     if (interaction.tileIndex !== -1) {
         const t = tiles[interaction.tileIndex];
         const pts = t.type === 's' ? { p0: t.pts[0], p1: t.pts[1] } : { c: t.c, s: t.s, e: t.e };
@@ -234,7 +275,7 @@ canvas.onmousedown = (e) => {
             if (Math.hypot(pts[key].x - mx, pts[key].y - my) < hitR) {
                 interaction.mode = 'NODE';
                 interaction.pointKey = key;
-                return; // Stop searching, we grabbed a node
+                return;
             }
         }
     }
@@ -244,7 +285,6 @@ canvas.onmousedown = (e) => {
     for (let i = tiles.length - 1; i >= 0; i--) {
         const t = tiles[i];
         if (t.type === 's') {
-            // Distance to line segment
             const l2 = Math.pow(t.pts[0].x - t.pts[1].x, 2) + Math.pow(t.pts[0].y - t.pts[1].y, 2);
             let t_val = ((mx - t.pts[0].x) * (t.pts[1].x - t.pts[0].x) + (my - t.pts[0].y) * (t.pts[1].y - t.pts[0].y)) / l2;
             t_val = Math.max(0, Math.min(1, t_val));
@@ -254,7 +294,7 @@ canvas.onmousedown = (e) => {
         } else if (t.type === 'a') {
             const r = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
             const distToCenter = Math.hypot(mx - t.c.x, my - t.c.y);
-            if (Math.abs(distToCenter - r) < hitR) { newSelection = i; break; } // Roughly touching the arc outline
+            if (Math.abs(distToCenter - r) < hitR) { newSelection = i; break; }
         }
     }
 
@@ -265,13 +305,19 @@ canvas.onmousedown = (e) => {
         // 3. Pan Background
         interaction.mode = 'PAN';
         interaction.lastP = { x: e.clientX, y: e.clientY };
-        interaction.tileIndex = -1; // Deselect
+        interaction.tileIndex = -1;
         updateUI(); draw();
     }
 };
 
 window.onmousemove = (e) => {
-    if (interaction.mode === 'NODE' && interaction.tileIndex !== -1) {
+    if (interaction.mode === 'DRAG_BG') {
+        // Move the background image
+        bgState.x += (e.clientX - interaction.lastP.x) / camera.zoom;
+        bgState.y += (e.clientY - interaction.lastP.y) / camera.zoom;
+        interaction.lastP = { x: e.clientX, y: e.clientY };
+        draw();
+    } else if (interaction.mode === 'NODE' && interaction.tileIndex !== -1) {
         const rect = canvas.getBoundingClientRect();
         let nx = (e.clientX - rect.left - camera.x) / camera.zoom;
         let ny = (e.clientY - rect.top - camera.y) / camera.zoom;
@@ -303,15 +349,29 @@ window.onmousemove = (e) => {
 
 window.onmouseup = () => interaction.mode = null;
 
-// Hotkey delete
 canvas.addEventListener('keydown', (e) => {
     if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelected(); }
 });
 
-canvas.onwheel = (e) => { camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1); draw(); e.preventDefault(); };
+canvas.onwheel = (e) => { 
+    if (document.getElementById('editBgMode').checked && bgState.img) {
+        // Resize Background Image (Scale from Center)
+        let oldScale = bgState.scale;
+        bgState.scale *= (e.deltaY > 0 ? 0.95 : 1.05); // Adjust slightly slower for fine tuning
+        let imgCx = bgState.x + (bgState.img.width * oldScale) / 2;
+        let imgCy = bgState.y + (bgState.img.height * oldScale) / 2;
+        bgState.x = imgCx - (bgState.img.width * bgState.scale) / 2;
+        bgState.y = imgCy - (bgState.img.height * bgState.scale) / 2;
+    } else {
+        // Zoom Camera
+        camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1); 
+    }
+    draw(); 
+    e.preventDefault(); 
+};
 
 // ---------------------------------------------------------
-// Importer / Exporter (Preserves AS3 formatting)
+// Importer / Exporter
 // ---------------------------------------------------------
 const getVec = (block, key) => {
     const regex = new RegExp(key + "\\s*\\(\\s*new\\s+Vector2\\s*\\(\\s*(-?\\d+\\.?\\d*)\\s*,\\s*(-?\\d+\\.?\\d*)\\s*\\)", "i");
