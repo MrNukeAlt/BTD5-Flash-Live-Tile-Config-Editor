@@ -84,7 +84,7 @@
             </label>
         </div>
 
-        <div class="instructions">Controls: Drag Background to Pan | Scroll to Zoom | Click a line to select it | Connect tiles using the purple Link Tool.</div>
+        <div class="instructions">Controls: Drag Background to Pan | Scroll to Zoom | Click a line to select it | Connect tiles using the purple Link Tool. Multi-path maps are auto-grouped on export.</div>
     </div>
     
     <div id="viewport-container"><canvas id="editorCanvas" tabindex="1"></canvas></div>
@@ -107,8 +107,9 @@ document.getElementById('bgInput').addEventListener('change', function(e) {
         const img = new Image();
         img.onload = function() {
             bgState.img = img;
-            bgState.x = -img.width / 2;
-            bgState.y = -img.height / 2;
+            // Center in the new 800x600 map boundary
+            bgState.x = 400 - img.width / 2;
+            bgState.y = 300 - img.height / 2;
             bgState.scale = 1;
             draw();
         }
@@ -140,7 +141,7 @@ function updateUI() {
         propNext.value = tiles[idx].next.join(', ');
     } else {
         propNext.value = "";
-        if (interaction.mode === 'LINK') toggleLinkMode(); // Turn off link mode if deselecting
+        if (interaction.mode === 'LINK') toggleLinkMode();
     }
     
     const isArc = hasSel && tiles[idx].type === 'a';
@@ -183,7 +184,6 @@ function deleteSelected() {
     const delIdx = interaction.tileIndex;
     tiles.splice(delIdx, 1);
     
-    // Safely shift all .next arrays so paths don't break when deleting!
     tiles.forEach(t => {
         t.next = t.next.filter(idx => idx !== delIdx);
         t.next = t.next.map(idx => idx > delIdx ? idx - 1 : idx);
@@ -226,7 +226,7 @@ function branchPath() {
     const template = { next: [], trans: parentTile.trans, layer: parentTile.layer };
     
     for (let i = 0; i < count; i++) {
-        let offset = (i - (count-1)/2) * 60; // Spread them out vertically
+        let offset = (i - (count-1)/2) * 60;
         let nx = px + 80;
         let ny = py + offset;
         
@@ -244,7 +244,7 @@ function toggleLinkMode() {
         btn.style.background = '#673AB7';
     } else {
         interaction.mode = 'LINK';
-        btn.style.background = '#E91E63'; // Bright Pink when active
+        btn.style.background = '#E91E63'; 
     }
 }
 
@@ -264,14 +264,38 @@ function draw() {
         ctx.globalAlpha = 1.0;
     }
 
-    // 2. Grid
+    // 2. Map Image Boundary (Standard 800x600 size)
+    ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
+    ctx.lineWidth = 4 / camera.zoom;
+    ctx.strokeRect(0, 0, 800, 600);
+    ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
+    ctx.font = `bold ${16 / camera.zoom}px Arial`;
+    ctx.fillText("Map Image Boundary (800x600)", 5, -10 / camera.zoom);
+
+    // 3. Grid & Coordinate Axes
     ctx.strokeStyle = "rgba(51, 51, 51, 0.5)"; ctx.lineWidth = 1/camera.zoom;
     for(let i = -3000; i <= 3000; i += 100) {
         ctx.beginPath(); ctx.moveTo(i, -3000); ctx.lineTo(i, 3000); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(-3000, i); ctx.lineTo(3000, i); ctx.stroke();
     }
+    
+    // Draw Bold X and Y Axes
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.5)"; ctx.lineWidth = 3/camera.zoom;
+    ctx.beginPath(); ctx.moveTo(0, -3000); ctx.lineTo(0, 3000); ctx.stroke(); // Y Axis
+    ctx.beginPath(); ctx.moveTo(-3000, 0); ctx.lineTo(3000, 0); ctx.stroke(); // X Axis
+    
+    // Coordinate Labels
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctx.font = `${14/camera.zoom}px Consolas, monospace`;
+    for(let i = -3000; i <= 3000; i += 200) {
+        if(i !== 0) {
+            ctx.fillText(i, i + 5, 18/camera.zoom); // X labels
+            ctx.fillText(i, 5, i - 5/camera.zoom); // Y labels
+        }
+    }
+    ctx.fillText("(0, 0)", 5, -5/camera.zoom);
 
-    // 3. Draw Logical Links (Arrows)
+    // 4. Draw Logical Links (Arrows)
     ctx.setLineDash([8, 8]);
     ctx.lineWidth = 2 / camera.zoom;
     tiles.forEach((t, i) => {
@@ -287,9 +311,9 @@ function draw() {
             
             ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(sx, sy);
             
-            if (i === interaction.tileIndex) ctx.strokeStyle = '#ffeb3b'; // Outbound highlight
-            else if (nxtIdx === interaction.tileIndex) ctx.strokeStyle = '#4CAF50'; // Inbound highlight
-            else ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            if (i === interaction.tileIndex) ctx.strokeStyle = '#ffeb3b';
+            else if (nxtIdx === interaction.tileIndex) ctx.strokeStyle = '#4CAF50';
+            else ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             
             ctx.stroke();
 
@@ -307,17 +331,16 @@ function draw() {
     });
     ctx.setLineDash([]);
 
-    // 4. Draw Tiles
+    // 5. Draw Tiles
     const hitRadius = 8 / camera.zoom;
     tiles.forEach((t, i) => {
         const isSelected = (i === interaction.tileIndex);
         const isNextOfSelected = interaction.tileIndex !== -1 && tiles[interaction.tileIndex].next && tiles[interaction.tileIndex].next.includes(i);
         const isPrevOfSelected = interaction.tileIndex !== -1 && t.next && t.next.includes(interaction.tileIndex);
         
-        // Color coding based on path flow relationships
         if (isSelected) ctx.strokeStyle = '#ffffff';
-        else if (isNextOfSelected) ctx.strokeStyle = '#ffeb3b'; // Yellow for next
-        else if (isPrevOfSelected) ctx.strokeStyle = '#4CAF50'; // Green for previous
+        else if (isNextOfSelected) ctx.strokeStyle = '#ffeb3b';
+        else if (isPrevOfSelected) ctx.strokeStyle = '#4CAF50';
         else ctx.strokeStyle = `hsl(${(i * 45) % 360}, 80%, 60%)`;
         
         ctx.lineWidth = isSelected ? 8 : 5;
@@ -382,17 +405,16 @@ canvas.onmousedown = (e) => {
         interaction.mode = 'DRAG_BG'; interaction.lastP = { x: e.clientX, y: e.clientY }; return; 
     }
 
-    // Link Tool Mode
     if (interaction.mode === 'LINK' && interaction.tileIndex !== -1) {
         let targetIdx = getTileAt(mx, my, hitR);
         if (targetIdx !== -1 && targetIdx !== interaction.tileIndex) {
             let nxtArr = tiles[interaction.tileIndex].next;
-            if (nxtArr.includes(targetIdx)) nxtArr.splice(nxtArr.indexOf(targetIdx), 1); // Disconnect
-            else nxtArr.push(targetIdx); // Connect
+            if (nxtArr.includes(targetIdx)) nxtArr.splice(nxtArr.indexOf(targetIdx), 1); 
+            else nxtArr.push(targetIdx); 
             updateUI(); draw();
             return;
         }
-        interaction.mode = null; // Clicking empty space exits link mode
+        interaction.mode = null; 
         document.getElementById('btnLinkMode').style.background = '#673AB7';
     }
 
@@ -463,7 +485,7 @@ canvas.onwheel = (e) => {
 };
 
 // ---------------------------------------------------------
-// AS3 Importer / Exporter
+// AS3 Importer / Exporter - WITH MULTI-PATH SUPPORT
 // ---------------------------------------------------------
 const getVec = (block, key) => {
     const match = block.match(new RegExp(key + "\\s*\\(\\s*new\\s+Vector2\\s*\\(\\s*(-?\\d+\\.?\\d*)\\s*,\\s*(-?\\d+\\.?\\d*)\\s*\\)", "i"));
@@ -480,40 +502,106 @@ function parseNextTiles(str) {
 function parseCode() {
     const raw = document.getElementById('codeInput').value;
     tiles = []; interaction.tileIndex = -1; updateUI();
-    const chunks = raw.split(/new\s+(StraightTile|ArcTile)/g);
     
-    for (let i = 1; i < chunks.length; i += 2) {
-        const type = chunks[i], content = chunks[i+1];
-        const nextM = content.match(/\.ini_nextTileIndices\(([^)]*\[.*?\][^)]*)\)/) || content.match(/\.ini_nextTileIndices\((.*?)\)/);
-        const transM = content.match(/\.ini_transitionType\((\d+)\)/);
-        const layerM = content.match(/\.ini_layer\((\d+)\)/);
-        
-        let md = { 
-            next: nextM ? parseNextTiles(nextM[1]) : [], 
-            trans: transM ? transM[1] : "0", 
-            layer: layerM ? layerM[1] : "0" 
-        };
+    // Split the input into separate path arrays if they exist
+    const pathMatches = raw.split(/Vector\.<Tile>\(\s*\[/g);
+    let indexOffset = 0;
+    
+    const chunksToProcess = pathMatches.length > 1 ? pathMatches.slice(1) : [raw];
 
-        if (type === "StraightTile") {
-            const s = getVec(content, "ini_startPoint"), e = getVec(content, "ini_endPoint");
-            if (s && e) tiles.push({ ...md, type: 's', pts: [s, e] });
-        } else if (type === "ArcTile") {
-            const c = getVec(content, "ini_baseCentre"), s = getVec(content, "ini_baseStart"), e = getVec(content, "ini_baseEnd");
-            if (c && s && e) tiles.push({ ...md, type: 'a', c, s, e, r: content.toLowerCase().includes("reflex(true)") });
+    chunksToProcess.forEach(pathStr => {
+        const chunks = pathStr.split(/new\s+(StraightTile|ArcTile)/g);
+        let tilesInThisPath = 0;
+        
+        for (let i = 1; i < chunks.length; i += 2) {
+            const type = chunks[i], content = chunks[i+1];
+            const nextM = content.match(/\.ini_nextTileIndices\(([^)]*\[.*?\][^)]*)\)/) || content.match(/\.ini_nextTileIndices\((.*?)\)/);
+            const transM = content.match(/\.ini_transitionType\((\d+)\)/);
+            const layerM = content.match(/\.ini_layer\((\d+)\)/);
+            
+            // Adjust the imported 'next' indices by adding the current offset
+            let md = { 
+                next: nextM ? parseNextTiles(nextM[1]).map(n => n + indexOffset) : [], 
+                trans: transM ? transM[1] : "0", 
+                layer: layerM ? layerM[1] : "0" 
+            };
+
+            if (type === "StraightTile") {
+                const s = getVec(content, "ini_startPoint"), e = getVec(content, "ini_endPoint");
+                if (s && e) { tiles.push({ ...md, type: 's', pts: [s, e] }); tilesInThisPath++; }
+            } else if (type === "ArcTile") {
+                const c = getVec(content, "ini_baseCentre"), s = getVec(content, "ini_baseStart"), e = getVec(content, "ini_baseEnd");
+                if (c && s && e) { tiles.push({ ...md, type: 'a', c, s, e, r: content.toLowerCase().includes("reflex(true)") }); tilesInThisPath++; }
+            }
         }
-    }
+        indexOffset += tilesInThisPath;
+    });
+    
     draw();
 }
 
 function exportCode() {
-    const out = tiles.map(t => {
-        let str = t.type === 's' 
-            ? `new StraightTile().ini_startPoint(new Vector2(${t.pts[0].x.toFixed(2)},${t.pts[0].y.toFixed(2)})).ini_endPoint(new Vector2(${t.pts[1].x.toFixed(2)},${t.pts[1].y.toFixed(2)}))`
-            : `new ArcTile().ini_baseCentre(new Vector2(${t.c.x.toFixed(2)},${t.c.y.toFixed(2)})).ini_baseStart(new Vector2(${t.s.x.toFixed(2)},${t.s.y.toFixed(2)})).ini_baseEnd(new Vector2(${t.e.x.toFixed(2)},${t.e.y.toFixed(2)}))`;
-        
-        return str + `.ini_nextTileIndices(Vector.<int>([${t.next.join(",")}])).ini_transitionType(${t.trans}).ini_layer(${t.layer})`;
+    // 1. Group tiles into separate disconnected paths
+    let paths = [];
+    let visited = new Set();
+    
+    // Two-way connection map to group nodes properly
+    let connections = tiles.map(() => []);
+    tiles.forEach((t, i) => {
+        if(t.next) {
+            t.next.forEach(nxt => {
+                connections[i].push(nxt);
+                if (connections[nxt]) connections[nxt].push(i);
+            });
+        }
     });
-    document.getElementById('codeInput').value = `tileSets = Vector.<Vector.<Tile>>([Vector.<Tile>([${out.join(",")}])]);`;
+
+    for (let i = 0; i < tiles.length; i++) {
+        if (!visited.has(i)) {
+            let currentPath = [];
+            let queue = [i];
+            visited.add(i);
+
+            while(queue.length > 0) {
+                let curr = queue.shift();
+                currentPath.push(curr);
+                connections[curr].forEach(neighbor => {
+                    if (!visited.has(neighbor)) {
+                        visited.add(neighbor);
+                        queue.push(neighbor);
+                    }
+                });
+            }
+            // Sort to keep logical timeline order
+            currentPath.sort((a,b) => a-b);
+            paths.push(currentPath);
+        }
+    }
+
+    // 2. Generate code strings for each separated path
+    let pathStrings = paths.map(pathIndices => {
+        // Remap global array indices to isolated local indices for the sub-array
+        let localIndices = {};
+        pathIndices.forEach((globalIdx, localIdx) => {
+            localIndices[globalIdx] = localIdx;
+        });
+
+        let out = pathIndices.map(globalIdx => {
+            let t = tiles[globalIdx];
+            let localNext = (t.next || []).map(n => localIndices[n]).filter(n => n !== undefined);
+            
+            let str = t.type === 's' 
+                ? `new StraightTile().ini_startPoint(new Vector2(${t.pts[0].x.toFixed(2)},${t.pts[0].y.toFixed(2)})).ini_endPoint(new Vector2(${t.pts[1].x.toFixed(2)},${t.pts[1].y.toFixed(2)}))`
+                : `new ArcTile().ini_baseCentre(new Vector2(${t.c.x.toFixed(2)},${t.c.y.toFixed(2)})).ini_baseStart(new Vector2(${t.s.x.toFixed(2)},${t.s.y.toFixed(2)})).ini_baseEnd(new Vector2(${t.e.x.toFixed(2)},${t.e.y.toFixed(2)}))`;
+            
+            return str + `.ini_nextTileIndices(Vector.<int>([${localNext.join(",")}])).ini_transitionType(${t.trans}).ini_layer(${t.layer})`;
+        });
+        return `Vector.<Tile>([${out.join(",")}])`;
+    });
+
+    if(pathStrings.length === 0) pathStrings = ["Vector.<Tile>([])"];
+
+    document.getElementById('codeInput').value = `tileSets = Vector.<Vector.<Tile>>([${pathStrings.join(",\n")}]);`;
 }
 
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 220; draw(); };
