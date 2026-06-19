@@ -7,7 +7,7 @@
         :root { --bg: #1a1a1a; --panel: #2a2a2a; --accent: #4CAF50; --danger: #f44336; --warn: #ff9800; --text: #eee; --bg-tool: #9c27b0; }
         body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        .ui-panel { background: var(--panel); padding: 15px; border-bottom: 2px solid #444; display: flex; flex-direction: column; gap: 10px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .ui-panel { background: var(--panel); padding: 15px; border-bottom: 2px solid #444; display: flex; flex-direction: column; gap: 10px; z-index: 10; box-shadow: 0 4px 15px rgba(0,0,0,0.5); position: relative; }
         .top-row { display: flex; gap: 15px; align-items: center; }
         textarea { flex: 1; height: 80px; background: #111; color: #0f0; border: 1px solid #555; padding: 10px; font-family: 'Consolas', monospace; font-size: 12px; border-radius: 4px; resize: none; }
         
@@ -35,6 +35,17 @@
         canvas { display: block; cursor: crosshair; outline: none; }
         
         .instructions { font-size: 11px; color: #aaa; margin-top: 5px; }
+
+        /* Multi-Path Debug Panel */
+        #pathInfo {
+            position: absolute; right: 15px; top: 15px;
+            background: rgba(20, 20, 20, 0.85);
+            border: 1px solid #555; padding: 15px;
+            border-radius: 6px; font-family: 'Consolas', monospace;
+            font-size: 12px; color: #0f0; pointer-events: none;
+            z-index: 100; min-width: 200px; max-height: calc(100vh - 250px);
+            overflow-y: auto; text-shadow: 1px 1px 0 #000;
+        }
     </style>
 </head>
 <body>
@@ -49,7 +60,13 @@
         </div>
         
         <div class="editor-tools">
-            <div class="status" id="selStatus">No Selection</div>
+            <div class="status" id="selStatus">No Selection<label style="font-size: 11px; color: #ccc;">Transition:
+<select id="propTransition" onchange="updateTileProps()" disabled>
+<option value="0">Road</option>
+<option value="1">Underpass</option>
+<option value="2">Teleport</option>
+</select></label>
+            </div>
             
             <div class="tool-group">
                 <button class="btn-add" onclick="addTile('s')">+ Straight</button>
@@ -57,19 +74,19 @@
             </div>
 
             <div class="tool-group" style="background: #1e3a5f; padding: 4px 10px; border-radius: 4px;">
-                <button class="btn-clipboard" id="btnCopy" onclick="copySelected()" disabled>Copy (Ctrl+C)</button>
-                <button class="btn-clipboard" id="btnPaste" onclick="pasteClipboard()" disabled>Paste (Ctrl+V)</button>
+                <button class="btn-clipboard" id="btnCopy" onclick="copySelected()" disabled>Copy</button>
+                <button class="btn-clipboard" id="btnPaste" onclick="pasteClipboard()" disabled>Paste</button>
             </div>
 
             <div class="tool-group" style="background: #2a2a2a; padding: 4px 10px; border-radius: 4px;">
-                <button class="btn-branch" id="btnBranch" onclick="branchPath()" disabled>Split Path (Add Spawns)</button>
-                <button class="btn-link" id="btnLinkMode" onclick="toggleLinkMode()" disabled title="Click this, then click another tile to connect them">Link Tool</button>
+                <button class="btn-branch" id="btnCreateBranch" onclick="branchPath()" disabled>Create Branch</button>
+                <button class="btn-link" id="btnLinkMode" onclick="toggleLinkMode()" disabled title="Click another tile to add to target links">Link Tool</button>
                 <label style="font-size: 11px; color: #ccc;">Next: <input type="text" id="propNext" style="width: 80px; background:#111; color:#fff; border:1px solid #555; padding:4px;" onchange="updateTileProps()" disabled></label>
-                <label style="font-size:11px;color:#ccc;">Branch:
-<select id="propBranch" onchange="updateTileProps()" disabled>
-<option value="random">Random</option>
-<option value="roundrobin">Round Robin</option>
-<option value="fixed">Fixed</option>
+            <label style="font-size: 11px; color: #ccc;">Transition:
+<select id="propTransition" onchange="updateTileProps()" disabled>
+<option value="0">Road</option>
+<option value="1">Underpass</option>
+<option value="2">Teleport</option>
 </select></label>
             </div>
             
@@ -95,11 +112,14 @@
                 Opacity: <input type="range" id="bgOpacity" min="0.1" max="1" step="0.1" value="0.7" style="width: 80px;" oninput="draw()">
             </label>
         </div>
-
-        <div class="instructions">Controls: <b>Shift+Drag</b> to Box Select | <b>Drag selection</b> to move group | Drag Background to Pan | Scroll to Zoom | Multi-path maps are auto-grouped on export.</div>
+        
+        <div class="instructions">Controls: <b>Shift+Drag</b> to Box Select | <b>Drag selection</b> to move group | Drag Background to Pan | Scroll to Zoom</div>
     </div>
     
-    <div id="viewport-container"><canvas id="editorCanvas" tabindex="1"></canvas></div>
+    <div id="viewport-container">
+        <div id="pathInfo">Loading stats...</div>
+        <canvas id="editorCanvas" tabindex="1"></canvas>
+    </div>
 
 <script>
 const canvas = document.getElementById('editorCanvas');
@@ -141,9 +161,90 @@ document.getElementById('bgInput').addEventListener('change', function(e) {
 });
 
 // ---------------------------------------------------------
+// Path Detection & Debug Info (Multi-Path Logic)
+// ---------------------------------------------------------
+function detectPaths() {
+    let visited = new Set();
+    let groups = [];
+    
+    // Build undirected adjacency list to identify connected groupings
+    let adj = tiles.map(() => []);
+    tiles.forEach((t, i) => {
+        if(t.next) {
+            t.next.forEach(nxt => {
+                adj[i].push(nxt);
+                if (adj[nxt]) adj[nxt].push(i);
+            });
+        }
+    });
+
+    // Reset properties
+    tiles.forEach(t => { t.pathGroup = -1; t.localIndex = -1; });
+
+    // BFS to group tiles
+    for (let i = 0; i < tiles.length; i++) {
+        if (!visited.has(i)) {
+            let group = [];
+            let q = [i];
+            visited.add(i);
+            
+            while(q.length > 0) {
+                let curr = q.shift();
+                group.push(curr);
+                adj[curr].forEach(neighbor => {
+                    if (!visited.has(neighbor)) {
+                        visited.add(neighbor);
+                        q.push(neighbor);
+                    }
+                });
+            }
+            group.sort((a,b) => a - b);
+            groups.push(group);
+        }
+    }
+
+    // Assign Local and Group identifiers directly to the tiles
+    groups.forEach((g, gIdx) => {
+        g.forEach((tIdx, lIdx) => {
+            tiles[tIdx].pathGroup = gIdx + 1;
+            tiles[tIdx].localIndex = lIdx;
+        });
+    });
+
+    updateDebugPanel(groups);
+    return groups;
+}
+
+function updateDebugPanel(groups) {
+    const panel = document.getElementById('pathInfo');
+    if (!panel) return;
+    
+    let html = `<b>Total Tiles:</b> ${tiles.length}<br>`;
+    html += `<b>Path Groups:</b> ${groups.length}<br><br>`;
+    
+    groups.forEach((g, i) => {
+        html += `Group ${i + 1}: ${g.length} tiles<br>`;
+    });
+    
+    html += `<br><span style="color:cyan;"><b>Branch Nodes:</b></span><br>`;
+    let hasBranches = false;
+    tiles.forEach((t, i) => {
+        if (t.next && t.next.length > 1) {
+            html += `${i} -> [${t.next.join(', ')}]<br>`;
+            hasBranches = true;
+        }
+    });
+    
+    if(!hasBranches) html += `<i>None</i>`;
+    panel.innerHTML = html;
+}
+
+// ---------------------------------------------------------
 // UI & State Management
 // ---------------------------------------------------------
 function updateUI() {
+    detectPaths(); // Process group metrics whenever UI/state is expected to shift
+
     const count = selectedTiles.size;
     const hasSel = count > 0;
     const singleSel = count === 1;
@@ -158,17 +259,21 @@ function updateUI() {
     document.getElementById('btnPaste').disabled = clipboard.length === 0;
     
     // Tools that only work on single selections
-    document.getElementById('btnBranch').disabled = !singleSel;
+    document.getElementById('btnCreateBranch').disabled = !singleSel;
     document.getElementById('btnLinkMode').disabled = !singleSel;
     
     const propNext = document.getElementById('propNext');
     propNext.disabled = !singleSel;
-    document.getElementById('propBranch').disabled=!singleSel;
+    const propTransition = document.getElementById('propTransition');
+    if(propTransition) propTransition.disabled = !singleSel;
     
     if (singleSel) {
         propNext.value = tiles[firstSel].next.join(', ');
-        document.getElementById('propBranch').value=tiles[firstSel].branchMode||'random';
+        const propTransition = document.getElementById('propTransition');
+        if(propTransition) propTransition.value = tiles[firstSel].trans || "0";
     } else {
+        const propTransition = document.getElementById('propTransition');
+        if(propTransition) propTransition.value = "0";
         propNext.value = "";
         if (interaction.mode === 'LINK') toggleLinkMode();
     }
@@ -187,8 +292,9 @@ function updateTileProps() {
     } else {
         tiles[idx].next = val.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
     }
-    tiles[idx].branchMode=document.getElementById('propBranch')?document.getElementById('propBranch').value:'random';
-    draw();
+    const tr = document.getElementById('propTransition');
+    if(tr) tiles[idx].trans = tr.value;
+    updateUI(); draw();
 }
 
 // ---------------------------------------------------------
@@ -210,13 +316,10 @@ function pasteClipboard() {
     let baseIdx = tiles.length;
     let indexMap = {};
     
-    // Map original indices to their new pasted indices to preserve logical links inside the pasted group
     clipboard.forEach((c, i) => { indexMap[c.originalIdx] = baseIdx + i; });
     
     clipboard.forEach((c, i) => {
         let newTile = JSON.parse(JSON.stringify(c.tile)); 
-        
-        // Offset visually so it doesn't overlap exactly
         if (newTile.type === 's') {
             newTile.pts[0].x += 60; newTile.pts[0].y += 60;
             newTile.pts[1].x += 60; newTile.pts[1].y += 60;
@@ -226,9 +329,7 @@ function pasteClipboard() {
             newTile.e.x += 60; newTile.e.y += 60;
         }
         
-        // Remap internal path links. Drop external links.
         newTile.next = (newTile.next || []).map(nxt => indexMap[nxt]).filter(n => n !== undefined);
-        
         tiles.push(newTile);
         newSelection.add(baseIdx + i);
     });
@@ -244,7 +345,7 @@ function addTile(type) {
     const cx = (canvas.width / 2 - camera.x) / camera.zoom;
     const cy = (canvas.height / 2 - camera.y) / camera.zoom;
     const size = 100;
-    const template = { next: [], trans: "0", layer: "0", branchMode:'random' };
+    const template = { next: [], trans: "0", layer: "0" };
 
     if (type === 's') {
         tiles.push({ ...template, type: 's', pts: [{x: cx - size, y: cy}, {x: cx + size, y: cy}] });
@@ -259,7 +360,6 @@ function addTile(type) {
 function deleteSelected() {
     if (selectedTiles.size === 0) return;
     
-    // Sort descending so splicing doesn't mess up subsequent deletions
     let toDelete = Array.from(selectedTiles).sort((a, b) => b - a);
     
     toDelete.forEach(delIdx => {
@@ -350,6 +450,8 @@ function draw() {
     ctx.lineWidth = 4 / camera.zoom;
     ctx.strokeRect(0, 0, 800, 600);
     ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
     ctx.font = `bold ${16 / camera.zoom}px Arial`;
     ctx.fillText("Map Image Boundary (800x600)", 5, -10 / camera.zoom);
 
@@ -362,27 +464,18 @@ function draw() {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.5)"; ctx.lineWidth = 3/camera.zoom;
     ctx.beginPath(); ctx.moveTo(0, -3000); ctx.lineTo(0, 3000); ctx.stroke(); 
     ctx.beginPath(); ctx.moveTo(-3000, 0); ctx.lineTo(3000, 0); ctx.stroke(); 
-    
-    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-    ctx.font = `${14/camera.zoom}px Consolas, monospace`;
-    for(let i = -3000; i <= 3000; i += 200) {
-        if(i !== 0) {
-            ctx.fillText(i, i + 5, 18/camera.zoom); 
-            ctx.fillText(i, 5, i - 5/camera.zoom); 
-        }
-    }
-    ctx.fillText("(0, 0)", 5, -5/camera.zoom);
 
     ctx.setLineDash([8, 8]);
     ctx.lineWidth = 2 / camera.zoom;
     let singleIdx = selectedTiles.size === 1 ? Array.from(selectedTiles)[0] : -1;
     
+    // Draw Connections
     tiles.forEach((t, i) => {
         if (!t.next || t.next.length === 0) return;
         let ex = t.type === 's' ? t.pts[1].x : t.e.x;
         let ey = t.type === 's' ? t.pts[1].y : t.e.y;
         
-        t.next.forEach(nxtIdx => {
+        t.next.forEach((nxtIdx, branchIdx) => {
             let nxtT = tiles[nxtIdx];
             if (!nxtT) return;
             let sx = nxtT.type === 's' ? nxtT.pts[0].x : nxtT.s.x;
@@ -398,6 +491,8 @@ function draw() {
 
             let mx = (sx + ex) / 2, my = (sy + ey) / 2;
             let angle = Math.atan2(sy - ey, sx - ex);
+            
+            // Draw arrowhead
             ctx.beginPath();
             ctx.moveTo(mx, my);
             ctx.lineTo(mx - Math.cos(angle - 0.5)*15/camera.zoom, my - Math.sin(angle - 0.5)*15/camera.zoom);
@@ -405,33 +500,61 @@ function draw() {
             ctx.closePath();
             ctx.fillStyle = ctx.strokeStyle;
             ctx.fill();
+
+            // Branch Routing Labels (Path 1, Path 2...)
+            if (t.next.length > 1) {
+                ctx.fillStyle = "cyan";
+                ctx.font = `bold ${11 / camera.zoom}px Arial`;
+                ctx.textAlign = "center";
+                ctx.fillText(`Path ${branchIdx + 1}`, mx, my - 15 / camera.zoom);
+            }
         });
     });
     ctx.setLineDash([]);
 
+    // Draw Main Tiles & Annotations
     const hitRadius = 8 / camera.zoom;
     tiles.forEach((t, i) => {
         const isSelected = selectedTiles.has(i);
+        const isBranch = t.next && t.next.length > 1;
+        const isEnd = !t.next || t.next.length === 0;
+
         const isNextOfSelected = singleIdx !== -1 && tiles[singleIdx].next && tiles[singleIdx].next.includes(i);
         const isPrevOfSelected = singleIdx !== -1 && t.next && t.next.includes(singleIdx);
         
+        // Multi-Path Strict Outline Formatting
         if (isSelected) ctx.strokeStyle = '#ffffff';
-        else if (isNextOfSelected) ctx.strokeStyle = '#ffeb3b';
-        else if (isPrevOfSelected) ctx.strokeStyle = '#4CAF50';
-        else ctx.strokeStyle = `hsl(${(i * 45) % 360}, 80%, 60%)`;
+        else if (isNextOfSelected) ctx.strokeStyle = '#ffeb3b'; // UI Highlight link targets
+        else if (isPrevOfSelected) ctx.strokeStyle = '#4CAF50'; // UI Highlight link sources
+        else if (t.trans === "2") ctx.strokeStyle = '#ff00ff';
+        else if (t.trans === "1") ctx.strokeStyle = '#00ffff';
+        else if (isBranch) ctx.strokeStyle = 'cyan';
+        else if (isEnd) ctx.strokeStyle = 'red';
+        else ctx.strokeStyle = 'white';
         
         ctx.lineWidth = isSelected ? 8 : 5;
         ctx.lineCap = "round"; ctx.lineJoin = "round";
         
+        let cx, cy; // For drawing Labels
+
         if (t.type === 's') { 
             ctx.beginPath(); ctx.moveTo(t.pts[0].x, t.pts[0].y); ctx.lineTo(t.pts[1].x, t.pts[1].y); ctx.stroke();
+            cx = (t.pts[0].x + t.pts[1].x) / 2;
+            cy = (t.pts[0].y + t.pts[1].y) / 2;
         } else if (t.type === 'a') { 
             const rad = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
             const sa = Math.atan2(t.s.y - t.c.y, t.s.x - t.c.x);
             const ea = Math.atan2(t.e.y - t.c.y, t.e.x - t.c.x);
             let diff = (ea - sa) % (Math.PI * 2); if (diff < 0) diff += Math.PI * 2;
-            ctx.beginPath(); ctx.arc(t.c.x, t.c.y, rad, sa, ea, (t.r !== (diff > Math.PI))); ctx.stroke();
             
+            let isCCW = (t.r !== (diff > Math.PI));
+            ctx.beginPath(); ctx.arc(t.c.x, t.c.y, rad, sa, ea, isCCW); ctx.stroke();
+            
+            // Midpoint logic for arc label
+            let midA = isCCW ? sa + diff/2 : sa - ((Math.PI * 2 - diff)/2);
+            cx = t.c.x + Math.cos(midA) * rad;
+            cy = t.c.y + Math.sin(midA) * rad;
+
             if (isSelected) {
                 ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2 / camera.zoom;
                 ctx.beginPath(); ctx.moveTo(t.c.x, t.c.y); ctx.lineTo(t.s.x, t.s.y); ctx.stroke();
@@ -439,6 +562,28 @@ function draw() {
             }
         }
 
+        // --- Draw Global & Local Group Index Labels ---
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        ctx.font = `bold ${15 / camera.zoom}px Arial`;
+        ctx.fillStyle = isBranch ? "cyan" : (isEnd ? "red" : "white");
+        ctx.fillText(`[${i}]`, cx, cy - 8 / camera.zoom);
+        if(t.trans === "2") {
+            ctx.fillStyle="#ff66ff";
+            ctx.fillText("TELEPORT", cx, cy - 24 / camera.zoom);
+        } else if(t.trans === "1") {
+            ctx.fillStyle="#66ffff";
+            ctx.fillText("UNDERPASS", cx, cy - 24 / camera.zoom);
+        }
+
+        if (t.pathGroup !== undefined && t.localIndex !== undefined) {
+            ctx.font = `bold ${12 / camera.zoom}px Consolas`;
+            ctx.fillStyle = "#ffeb3b";
+            ctx.fillText(`P${t.pathGroup}-${t.localIndex}`, cx, cy + 10 / camera.zoom);
+        }
+
+        // Draw selection hit nodes
         if (isSelected) {
             const drawH = (x, y, color) => { 
                 ctx.fillStyle = color; ctx.fillRect(x - hitRadius, y - hitRadius, hitRadius*2, hitRadius*2); 
@@ -464,7 +609,6 @@ function draw() {
 // ---------------------------------------------------------
 // Mouse Logic
 // ---------------------------------------------------------
-
 function checkTileHit(t, mx, my, hitR) {
     if (t.type === 's') {
         const l2 = Math.pow(t.pts[0].x - t.pts[1].x, 2) + Math.pow(t.pts[0].y - t.pts[1].y, 2);
@@ -563,10 +707,15 @@ canvas.onmousedown = (e) => {
     if (interaction.mode === 'LINK' && selectedTiles.size === 1) {
         let targetIdx = getTileAt(mx, my, hitR);
         let srcIdx = Array.from(selectedTiles)[0];
+        
         if (targetIdx !== -1 && targetIdx !== srcIdx) {
             let nxtArr = tiles[srcIdx].next;
-            if (nxtArr.includes(targetIdx)) nxtArr.splice(nxtArr.indexOf(targetIdx), 1); 
-            else nxtArr.push(targetIdx); 
+            // Native array push without overwriting (satisfies explicit multi-path rule)
+            if (nxtArr.includes(targetIdx)) {
+                nxtArr.splice(nxtArr.indexOf(targetIdx), 1); 
+            } else {
+                nxtArr.push(targetIdx); 
+            }
             updateUI(); draw();
             return;
         }
@@ -666,7 +815,6 @@ window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
     
-    // Copy Paste Hotkeys
     if (e.ctrlKey || e.metaKey) {
         if (e.key === 'c' || e.key === 'C') copySelected();
         if (e.key === 'v' || e.key === 'V') pasteClipboard();
@@ -689,13 +837,14 @@ canvas.onwheel = (e) => {
 };
 
 // ---------------------------------------------------------
-// AS3 Importer / Exporter - WITH MULTI-PATH SUPPORT
+// AS3 Importer / Exporter - STRICT MULTI-PATH
 // ---------------------------------------------------------
 const getVec = (block, key) => {
     const match = block.match(new RegExp(key + "\\s*\\(\\s*new\\s+Vector2\\s*\\(\\s*(-?\\d+\\.?\\d*)\\s*,\\s*(-?\\d+\\.?\\d*)\\s*\\)", "i"));
     return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : null;
 };
 
+// The regex naturally extracts multi-value arrays perfectly: [7,8,9,10]
 function parseNextTiles(str) {
     if (!str) return [];
     const match = str.match(/\[(.*?)\]/);
@@ -705,7 +854,7 @@ function parseNextTiles(str) {
 
 function parseCode() {
     const raw = document.getElementById('codeInput').value;
-    tiles = []; selectedTiles.clear(); updateUI();
+    tiles = []; selectedTiles.clear();
     
     const pathMatches = raw.split(/Vector\.<Tile>\(\s*\[/g);
     let indexOffset = 0;
@@ -737,43 +886,12 @@ function parseCode() {
         }
         indexOffset += tilesInThisPath;
     });
-    draw();
+    updateUI(); draw();
 }
 
 function exportCode() {
-    let paths = [];
-    let visited = new Set();
-    let connections = tiles.map(() => []);
-    
-    tiles.forEach((t, i) => {
-        if(t.next) {
-            t.next.forEach(nxt => {
-                connections[i].push(nxt);
-                if (connections[nxt]) connections[nxt].push(i);
-            });
-        }
-    });
-
-    for (let i = 0; i < tiles.length; i++) {
-        if (!visited.has(i)) {
-            let currentPath = [];
-            let queue = [i];
-            visited.add(i);
-
-            while(queue.length > 0) {
-                let curr = queue.shift();
-                currentPath.push(curr);
-                connections[curr].forEach(neighbor => {
-                    if (!visited.has(neighbor)) {
-                        visited.add(neighbor);
-                        queue.push(neighbor);
-                    }
-                });
-            }
-            currentPath.sort((a,b) => a-b);
-            paths.push(currentPath);
-        }
-    }
+    // Utilize detectPaths() to natively derive Group separation vectors
+    let paths = detectPaths();
 
     let pathStrings = paths.map(pathIndices => {
         let localIndices = {};
@@ -781,23 +899,27 @@ function exportCode() {
 
         let out = pathIndices.map(globalIdx => {
             let t = tiles[globalIdx];
+            
+            // Map the global branch target connections back to local indices in this group vector block
             let localNext = (t.next || []).map(n => localIndices[n]).filter(n => n !== undefined);
             
             let str = t.type === 's' 
                 ? `new StraightTile().ini_startPoint(new Vector2(${t.pts[0].x.toFixed(2)},${t.pts[0].y.toFixed(2)})).ini_endPoint(new Vector2(${t.pts[1].x.toFixed(2)},${t.pts[1].y.toFixed(2)}))`
                 : `new ArcTile().ini_baseCentre(new Vector2(${t.c.x.toFixed(2)},${t.c.y.toFixed(2)})).ini_baseStart(new Vector2(${t.s.x.toFixed(2)},${t.s.y.toFixed(2)})).ini_baseEnd(new Vector2(${t.e.x.toFixed(2)},${t.e.y.toFixed(2)}))`;
             
+            // Strict syntax array mapping: .ini_nextTileIndices(Vector.<int>([7,8,9,10]))
             return str + `.ini_nextTileIndices(Vector.<int>([${localNext.join(",")}])).ini_transitionType(${t.trans}).ini_layer(${t.layer})`;
         });
-        return `Vector.<Tile>([${out.join(",")}])`;
+        return `    Vector.<Tile>([\n        ${out.join(",\n        ")}\n    ])`;
     });
 
-    if(pathStrings.length === 0) pathStrings = ["Vector.<Tile>([])"];
-    document.getElementById('codeInput').value = `tileSets = Vector.<Vector.<Tile>>([${pathStrings.join(",\n")}]);`;
+    if(pathStrings.length === 0) pathStrings = ["    Vector.<Tile>([])"];
+    document.getElementById('codeInput').value = `tileSets = Vector.<Vector.<Tile>>([\n${pathStrings.join(",\n")}\n]);`;
 }
 
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 220; draw(); };
 window.onresize();
+updateUI(); // Init first setup cycle
 </script>
 </body>
 </html>
