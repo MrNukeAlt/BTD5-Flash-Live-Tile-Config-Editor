@@ -65,6 +65,12 @@
                 <button class="btn-branch" id="btnBranch" onclick="branchPath()" disabled>Split Path (Add Spawns)</button>
                 <button class="btn-link" id="btnLinkMode" onclick="toggleLinkMode()" disabled title="Click this, then click another tile to connect them">Link Tool</button>
                 <label style="font-size: 11px; color: #ccc;">Next: <input type="text" id="propNext" style="width: 80px; background:#111; color:#fff; border:1px solid #555; padding:4px;" onchange="updateTileProps()" disabled></label>
+                <label style="font-size:11px;color:#ccc;">Branch:
+<select id="propBranch" onchange="updateTileProps()" disabled>
+<option value="random">Random</option>
+<option value="roundrobin">Round Robin</option>
+<option value="fixed">Fixed</option>
+</select></label>
             </div>
             
             <div class="tool-group">
@@ -157,9 +163,11 @@ function updateUI() {
     
     const propNext = document.getElementById('propNext');
     propNext.disabled = !singleSel;
+    document.getElementById('propBranch').disabled=!singleSel;
     
     if (singleSel) {
         propNext.value = tiles[firstSel].next.join(', ');
+        document.getElementById('propBranch').value=tiles[firstSel].branchMode||'random';
     } else {
         propNext.value = "";
         if (interaction.mode === 'LINK') toggleLinkMode();
@@ -179,6 +187,7 @@ function updateTileProps() {
     } else {
         tiles[idx].next = val.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
     }
+    tiles[idx].branchMode=document.getElementById('propBranch')?document.getElementById('propBranch').value:'random';
     draw();
 }
 
@@ -235,7 +244,7 @@ function addTile(type) {
     const cx = (canvas.width / 2 - camera.x) / camera.zoom;
     const cy = (canvas.height / 2 - camera.y) / camera.zoom;
     const size = 100;
-    const template = { next: [], trans: "0", layer: "0" };
+    const template = { next: [], trans: "0", layer: "0", branchMode:'random' };
 
     if (type === 's') {
         tiles.push({ ...template, type: 's', pts: [{x: cx - size, y: cy}, {x: cx + size, y: cy}] });
