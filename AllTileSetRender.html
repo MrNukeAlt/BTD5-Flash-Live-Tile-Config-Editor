@@ -29,6 +29,7 @@
         .btn-bg { background: var(--bg-tool); }
         .btn-branch { background: #00bcd4; }
         .btn-link { background: #673AB7; transition: background 0.2s; }
+        .btn-clipboard { background: #e91e63; }
 
         #viewport-container { flex: 1; position: relative; background: #000; overflow: hidden; }
         canvas { display: block; cursor: crosshair; outline: none; }
@@ -53,6 +54,11 @@
             <div class="tool-group">
                 <button class="btn-add" onclick="addTile('s')">+ Straight</button>
                 <button class="btn-add" onclick="addTile('a')">+ Arc</button>
+            </div>
+
+            <div class="tool-group" style="background: #1e3a5f; padding: 4px 10px; border-radius: 4px;">
+                <button class="btn-clipboard" id="btnCopy" onclick="copySelected()" disabled>Copy (Ctrl+C)</button>
+                <button class="btn-clipboard" id="btnPaste" onclick="pasteClipboard()" disabled>Paste (Ctrl+V)</button>
             </div>
 
             <div class="tool-group" style="background: #2a2a2a; padding: 4px 10px; border-radius: 4px;">
@@ -84,7 +90,7 @@
             </label>
         </div>
 
-        <div class="instructions">Controls: Drag Background to Pan | Scroll to Zoom | Click a line to select it | Connect tiles using the purple Link Tool. Multi-path maps are auto-grouped on export.</div>
+        <div class="instructions">Controls: <b>Shift+Drag</b> to Box Select | <b>Drag selection</b> to move group | Drag Background to Pan | Scroll to Zoom | Multi-path maps are auto-grouped on export.</div>
     </div>
     
     <div id="viewport-container"><canvas id="editorCanvas" tabindex="1"></canvas></div>
@@ -94,8 +100,18 @@ const canvas = document.getElementById('editorCanvas');
 const ctx = canvas.getContext('2d');
 
 let tiles = [];
+let selectedTiles = new Set();
+let clipboard = [];
 let camera = { x: 300, y: 300, zoom: 0.8 };
-let interaction = { mode: null, tileIndex: -1, pointKey: null, lastP: {x:0, y:0} };
+
+let interaction = { 
+    mode: null, 
+    pointKey: null, 
+    activeNodeTile: -1,
+    lastP: {x:0, y:0},
+    boxStart: null,
+    boxEnd: null
+};
 
 let bgState = { img: null, x: 0, y: 0, scale: 1 };
 
@@ -107,7 +123,6 @@ document.getElementById('bgInput').addEventListener('change', function(e) {
         const img = new Image();
         img.onload = function() {
             bgState.img = img;
-            // Center in the new 800x600 map boundary
             bgState.x = 400 - img.width / 2;
             bgState.y = 300 - img.height / 2;
             bgState.scale = 1;
@@ -123,34 +138,41 @@ document.getElementById('bgInput').addEventListener('change', function(e) {
 // UI & State Management
 // ---------------------------------------------------------
 function updateUI() {
-    const idx = interaction.tileIndex;
-    const hasSel = idx !== -1 && tiles[idx];
+    const count = selectedTiles.size;
+    const hasSel = count > 0;
+    const singleSel = count === 1;
+    let firstSel = hasSel ? Array.from(selectedTiles)[0] : -1;
     
-    document.getElementById('selStatus').innerText = hasSel ? `Selected: Tile #${idx}` : "No Selection";
+    document.getElementById('selStatus').innerText = hasSel ? `Selected: ${count} Tile(s)` : "No Selection";
     document.getElementById('selStatus').style.color = hasSel ? '#ffeb3b' : '#888';
     
     document.getElementById('btnDel').disabled = !hasSel;
     document.getElementById('btnConv').disabled = !hasSel;
-    document.getElementById('btnBranch').disabled = !hasSel;
-    document.getElementById('btnLinkMode').disabled = !hasSel;
+    document.getElementById('btnCopy').disabled = !hasSel;
+    document.getElementById('btnPaste').disabled = clipboard.length === 0;
+    
+    // Tools that only work on single selections
+    document.getElementById('btnBranch').disabled = !singleSel;
+    document.getElementById('btnLinkMode').disabled = !singleSel;
     
     const propNext = document.getElementById('propNext');
-    propNext.disabled = !hasSel;
+    propNext.disabled = !singleSel;
     
-    if (hasSel) {
-        propNext.value = tiles[idx].next.join(', ');
+    if (singleSel) {
+        propNext.value = tiles[firstSel].next.join(', ');
     } else {
         propNext.value = "";
         if (interaction.mode === 'LINK') toggleLinkMode();
     }
     
-    const isArc = hasSel && tiles[idx].type === 'a';
-    document.getElementById('btnFlip').disabled = !isArc;
+    let allArcs = true;
+    selectedTiles.forEach(idx => { if (tiles[idx].type !== 'a') allArcs = false; });
+    document.getElementById('btnFlip').disabled = !hasSel || !allArcs;
 }
 
 function updateTileProps() {
-    const idx = interaction.tileIndex;
-    if (idx === -1) return;
+    if (selectedTiles.size !== 1) return;
+    const idx = Array.from(selectedTiles)[0];
     const val = document.getElementById('propNext').value;
     if (val.trim() === '') {
         tiles[idx].next = [];
@@ -158,6 +180,52 @@ function updateTileProps() {
         tiles[idx].next = val.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
     }
     draw();
+}
+
+// ---------------------------------------------------------
+// Clipboard Functions (Copy / Paste)
+// ---------------------------------------------------------
+function copySelected() {
+    if (selectedTiles.size === 0) return;
+    clipboard = Array.from(selectedTiles).map(idx => ({
+        originalIdx: idx,
+        tile: JSON.parse(JSON.stringify(tiles[idx]))
+    }));
+    updateUI();
+}
+
+function pasteClipboard() {
+    if (clipboard.length === 0) return;
+    
+    let newSelection = new Set();
+    let baseIdx = tiles.length;
+    let indexMap = {};
+    
+    // Map original indices to their new pasted indices to preserve logical links inside the pasted group
+    clipboard.forEach((c, i) => { indexMap[c.originalIdx] = baseIdx + i; });
+    
+    clipboard.forEach((c, i) => {
+        let newTile = JSON.parse(JSON.stringify(c.tile)); 
+        
+        // Offset visually so it doesn't overlap exactly
+        if (newTile.type === 's') {
+            newTile.pts[0].x += 60; newTile.pts[0].y += 60;
+            newTile.pts[1].x += 60; newTile.pts[1].y += 60;
+        } else {
+            newTile.c.x += 60; newTile.c.y += 60;
+            newTile.s.x += 60; newTile.s.y += 60;
+            newTile.e.x += 60; newTile.e.y += 60;
+        }
+        
+        // Remap internal path links. Drop external links.
+        newTile.next = (newTile.next || []).map(nxt => indexMap[nxt]).filter(n => n !== undefined);
+        
+        tiles.push(newTile);
+        newSelection.add(baseIdx + i);
+    });
+    
+    selectedTiles = newSelection;
+    updateUI(); draw();
 }
 
 // ---------------------------------------------------------
@@ -175,47 +243,53 @@ function addTile(type) {
         tiles.push({ ...template, type: 'a', c: {x: cx, y: cy - size}, s: {x: cx - size, y: cy}, e: {x: cx + size, y: cy}, r: false });
     }
     
-    interaction.tileIndex = tiles.length - 1;
+    selectedTiles = new Set([tiles.length - 1]);
     updateUI(); draw();
 }
 
 function deleteSelected() {
-    if (interaction.tileIndex === -1) return;
-    const delIdx = interaction.tileIndex;
-    tiles.splice(delIdx, 1);
+    if (selectedTiles.size === 0) return;
     
-    tiles.forEach(t => {
-        t.next = t.next.filter(idx => idx !== delIdx);
-        t.next = t.next.map(idx => idx > delIdx ? idx - 1 : idx);
+    // Sort descending so splicing doesn't mess up subsequent deletions
+    let toDelete = Array.from(selectedTiles).sort((a, b) => b - a);
+    
+    toDelete.forEach(delIdx => {
+        tiles.splice(delIdx, 1);
+        tiles.forEach(t => {
+            t.next = t.next.filter(idx => idx !== delIdx);
+            t.next = t.next.map(idx => idx > delIdx ? idx - 1 : idx);
+        });
     });
     
-    interaction.tileIndex = -1;
+    selectedTiles.clear();
     updateUI(); draw();
 }
 
 function convertSelected() {
-    const idx = interaction.tileIndex;
-    if (idx === -1) return;
-    let t = tiles[idx];
-    if (t.type === 's') {
-        t.type = 'a'; t.s = t.pts[0]; t.e = t.pts[t.pts.length-1]; delete t.pts;
-        t.c = { x: (t.s.x + t.e.x)/2 + 50, y: (t.s.y + t.e.y)/2 - 50 }; t.r = false;
-    } else {
-        t.type = 's'; t.pts = [t.s, t.e]; delete t.c; delete t.s; delete t.e; delete t.r;
-    }
+    if (selectedTiles.size === 0) return;
+    selectedTiles.forEach(idx => {
+        let t = tiles[idx];
+        if (t.type === 's') {
+            t.type = 'a'; t.s = t.pts[0]; t.e = t.pts[t.pts.length-1]; delete t.pts;
+            t.c = { x: (t.s.x + t.e.x)/2 + 50, y: (t.s.y + t.e.y)/2 - 50 }; t.r = false;
+        } else {
+            t.type = 's'; t.pts = [t.s, t.e]; delete t.c; delete t.s; delete t.e; delete t.r;
+        }
+    });
     updateUI(); draw();
 }
 
 function flipSelectedArc() {
-    if (interaction.tileIndex !== -1 && tiles[interaction.tileIndex].type === 'a') {
-        tiles[interaction.tileIndex].r = !tiles[interaction.tileIndex].r;
-        draw();
-    }
+    selectedTiles.forEach(idx => {
+        if (tiles[idx].type === 'a') tiles[idx].r = !tiles[idx].r;
+    });
+    draw();
 }
 
 function branchPath() {
-    if (interaction.tileIndex === -1) return;
-    let parentTile = tiles[interaction.tileIndex];
+    if (selectedTiles.size !== 1) return;
+    let pIdx = Array.from(selectedTiles)[0];
+    let parentTile = tiles[pIdx];
     
     let count = parseInt(prompt("How many branching spawn paths to create from this tile?", "4"));
     if (isNaN(count) || count < 2) return;
@@ -257,14 +331,12 @@ function draw() {
     ctx.translate(camera.x, camera.y);
     ctx.scale(camera.zoom, camera.zoom);
 
-    // 1. Bg Image
     if (bgState.img) {
         ctx.globalAlpha = document.getElementById('bgOpacity').value;
         ctx.drawImage(bgState.img, bgState.x, bgState.y, bgState.img.width * bgState.scale, bgState.img.height * bgState.scale);
         ctx.globalAlpha = 1.0;
     }
 
-    // 2. Map Image Boundary (Standard 800x600 size)
     ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
     ctx.lineWidth = 4 / camera.zoom;
     ctx.strokeRect(0, 0, 800, 600);
@@ -272,32 +344,30 @@ function draw() {
     ctx.font = `bold ${16 / camera.zoom}px Arial`;
     ctx.fillText("Map Image Boundary (800x600)", 5, -10 / camera.zoom);
 
-    // 3. Grid & Coordinate Axes
     ctx.strokeStyle = "rgba(51, 51, 51, 0.5)"; ctx.lineWidth = 1/camera.zoom;
     for(let i = -3000; i <= 3000; i += 100) {
         ctx.beginPath(); ctx.moveTo(i, -3000); ctx.lineTo(i, 3000); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(-3000, i); ctx.lineTo(3000, i); ctx.stroke();
     }
     
-    // Draw Bold X and Y Axes
     ctx.strokeStyle = "rgba(255, 255, 255, 0.5)"; ctx.lineWidth = 3/camera.zoom;
-    ctx.beginPath(); ctx.moveTo(0, -3000); ctx.lineTo(0, 3000); ctx.stroke(); // Y Axis
-    ctx.beginPath(); ctx.moveTo(-3000, 0); ctx.lineTo(3000, 0); ctx.stroke(); // X Axis
+    ctx.beginPath(); ctx.moveTo(0, -3000); ctx.lineTo(0, 3000); ctx.stroke(); 
+    ctx.beginPath(); ctx.moveTo(-3000, 0); ctx.lineTo(3000, 0); ctx.stroke(); 
     
-    // Coordinate Labels
     ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     ctx.font = `${14/camera.zoom}px Consolas, monospace`;
     for(let i = -3000; i <= 3000; i += 200) {
         if(i !== 0) {
-            ctx.fillText(i, i + 5, 18/camera.zoom); // X labels
-            ctx.fillText(i, 5, i - 5/camera.zoom); // Y labels
+            ctx.fillText(i, i + 5, 18/camera.zoom); 
+            ctx.fillText(i, 5, i - 5/camera.zoom); 
         }
     }
     ctx.fillText("(0, 0)", 5, -5/camera.zoom);
 
-    // 4. Draw Logical Links (Arrows)
     ctx.setLineDash([8, 8]);
     ctx.lineWidth = 2 / camera.zoom;
+    let singleIdx = selectedTiles.size === 1 ? Array.from(selectedTiles)[0] : -1;
+    
     tiles.forEach((t, i) => {
         if (!t.next || t.next.length === 0) return;
         let ex = t.type === 's' ? t.pts[1].x : t.e.x;
@@ -311,13 +381,12 @@ function draw() {
             
             ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(sx, sy);
             
-            if (i === interaction.tileIndex) ctx.strokeStyle = '#ffeb3b';
-            else if (nxtIdx === interaction.tileIndex) ctx.strokeStyle = '#4CAF50';
+            if (i === singleIdx) ctx.strokeStyle = '#ffeb3b';
+            else if (nxtIdx === singleIdx) ctx.strokeStyle = '#4CAF50';
             else ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             
             ctx.stroke();
 
-            // Arrow Head
             let mx = (sx + ex) / 2, my = (sy + ey) / 2;
             let angle = Math.atan2(sy - ey, sx - ex);
             ctx.beginPath();
@@ -331,12 +400,11 @@ function draw() {
     });
     ctx.setLineDash([]);
 
-    // 5. Draw Tiles
     const hitRadius = 8 / camera.zoom;
     tiles.forEach((t, i) => {
-        const isSelected = (i === interaction.tileIndex);
-        const isNextOfSelected = interaction.tileIndex !== -1 && tiles[interaction.tileIndex].next && tiles[interaction.tileIndex].next.includes(i);
-        const isPrevOfSelected = interaction.tileIndex !== -1 && t.next && t.next.includes(interaction.tileIndex);
+        const isSelected = selectedTiles.has(i);
+        const isNextOfSelected = singleIdx !== -1 && tiles[singleIdx].next && tiles[singleIdx].next.includes(i);
+        const isPrevOfSelected = singleIdx !== -1 && t.next && t.next.includes(singleIdx);
         
         if (isSelected) ctx.strokeStyle = '#ffffff';
         else if (isNextOfSelected) ctx.strokeStyle = '#ffeb3b';
@@ -371,28 +439,99 @@ function draw() {
             else { drawH(t.c.x, t.c.y, '#2196F3'); drawH(t.s.x, t.s.y, '#f44336'); drawH(t.e.x, t.e.y, '#f44336'); }
         }
     });
+
+    // Draw Selection Box
+    if (interaction.mode === 'BOX_SELECT' && interaction.boxStart && interaction.boxEnd) {
+        ctx.fillStyle = 'rgba(33, 150, 243, 0.2)';
+        ctx.strokeStyle = '#2196F3';
+        ctx.lineWidth = 1 / camera.zoom;
+        let w = interaction.boxEnd.x - interaction.boxStart.x;
+        let h = interaction.boxEnd.y - interaction.boxStart.y;
+        ctx.fillRect(interaction.boxStart.x, interaction.boxStart.y, w, h);
+        ctx.strokeRect(interaction.boxStart.x, interaction.boxStart.y, w, h);
+    }
 }
 
 // ---------------------------------------------------------
 // Mouse Logic
 // ---------------------------------------------------------
-function getTileAt(mx, my, hitR) {
-    for (let i = tiles.length - 1; i >= 0; i--) {
-        const t = tiles[i];
-        if (t.type === 's') {
-            const l2 = Math.pow(t.pts[0].x - t.pts[1].x, 2) + Math.pow(t.pts[0].y - t.pts[1].y, 2);
-            let t_val = ((mx - t.pts[0].x) * (t.pts[1].x - t.pts[0].x) + (my - t.pts[0].y) * (t.pts[1].y - t.pts[0].y)) / l2;
-            t_val = Math.max(0, Math.min(1, t_val));
-            const px = t.pts[0].x + t_val * (t.pts[1].x - t.pts[0].x);
-            const py = t.pts[0].y + t_val * (t.pts[1].y - t.pts[0].y);
-            if (Math.hypot(px - mx, py - my) < hitR) return i;
-        } else if (t.type === 'a') {
-            const r = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
-            const distToCenter = Math.hypot(mx - t.c.x, my - t.c.y);
-            if (Math.abs(distToCenter - r) < hitR) return i;
+
+function checkTileHit(t, mx, my, hitR) {
+    if (t.type === 's') {
+        const l2 = Math.pow(t.pts[0].x - t.pts[1].x, 2) + Math.pow(t.pts[0].y - t.pts[1].y, 2);
+        if (l2 === 0) return Math.hypot(mx - t.pts[0].x, my - t.pts[0].y) < hitR;
+        let t_val = ((mx - t.pts[0].x) * (t.pts[1].x - t.pts[0].x) + (my - t.pts[0].y) * (t.pts[1].y - t.pts[0].y)) / l2;
+        t_val = Math.max(0, Math.min(1, t_val));
+        const px = t.pts[0].x + t_val * (t.pts[1].x - t.pts[0].x);
+        const py = t.pts[0].y + t_val * (t.pts[1].y - t.pts[0].y);
+        return Math.hypot(px - mx, py - my) < hitR;
+    } else if (t.type === 'a') {
+        const r = Math.hypot(t.s.x - t.c.x, t.s.y - t.c.y);
+        const distToCenter = Math.hypot(mx - t.c.x, my - t.c.y);
+        
+        if (Math.abs(distToCenter - r) < hitR) {
+            const sa = Math.atan2(t.s.y - t.c.y, t.s.x - t.c.x);
+            const ea = Math.atan2(t.e.y - t.c.y, t.e.x - t.c.x);
+            let diff = (ea - sa) % (Math.PI * 2); if (diff < 0) diff += Math.PI * 2;
+            let ccw = (t.r !== (diff > Math.PI));
+            
+            const PI2 = Math.PI * 2;
+            let t_angle = (Math.atan2(my - t.c.y, mx - t.c.x) % PI2 + PI2) % PI2;
+            let s = (sa % PI2 + PI2) % PI2;
+            let e = (ea % PI2 + PI2) % PI2;
+            
+            if (ccw) {
+                if (s >= e) return t_angle <= s && t_angle >= e;
+                return t_angle <= s || t_angle >= e;
+            } else {
+                if (s <= e) return t_angle >= s && t_angle <= e;
+                return t_angle >= s || t_angle <= e;
+            }
         }
     }
+    return false;
+}
+
+function getTileAt(mx, my, hitR) {
+    for (let idx of selectedTiles) { if (checkTileHit(tiles[idx], mx, my, hitR)) return idx; }
+    for (let i = tiles.length - 1; i >= 0; i--) {
+        if (!selectedTiles.has(i) && checkTileHit(tiles[i], mx, my, hitR)) return i;
+    }
     return -1;
+}
+
+function getNodeAt(mx, my, hitR) {
+    for (let idx of selectedTiles) {
+        const t = tiles[idx];
+        const pts = t.type === 's' ? { p0: t.pts[0], p1: t.pts[1] } : { c: t.c, s: t.s, e: t.e };
+        for (let key in pts) { if (Math.hypot(pts[key].x - mx, pts[key].y - my) < hitR) return { index: idx, key: key }; }
+    }
+    for (let i = tiles.length - 1; i >= 0; i--) {
+        if (selectedTiles.has(i)) continue;
+        const t = tiles[i];
+        const pts = t.type === 's' ? { p0: t.pts[0], p1: t.pts[1] } : { c: t.c, s: t.s, e: t.e };
+        for (let key in pts) { if (Math.hypot(pts[key].x - mx, pts[key].y - my) < hitR) return { index: i, key: key }; }
+    }
+    return null;
+}
+
+function getTilesInBox(x1, y1, x2, y2) {
+    let minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+    let minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+    let result = [];
+    tiles.forEach((t, i) => {
+        let inBox = false;
+        if (t.type === 's') {
+            if (t.pts[0].x >= minX && t.pts[0].x <= maxX && t.pts[0].y >= minY && t.pts[0].y <= maxY) inBox = true;
+            if (t.pts[1].x >= minX && t.pts[1].x <= maxX && t.pts[1].y >= minY && t.pts[1].y <= maxY) inBox = true;
+        } else {
+            if (t.c.x >= minX && t.c.x <= maxX && t.c.y >= minY && t.c.y <= maxY) inBox = true;
+            if (t.s.x >= minX && t.s.x <= maxX && t.s.y >= minY && t.s.y <= maxY) inBox = true;
+            if (t.e.x >= minX && t.e.x <= maxX && t.e.y >= minY && t.e.y <= maxY) inBox = true;
+        }
+        if (inBox) result.push(i);
+    });
+    return result;
 }
 
 canvas.onmousedown = (e) => {
@@ -401,14 +540,22 @@ canvas.onmousedown = (e) => {
     const my = (e.clientY - rect.top - camera.y) / camera.zoom;
     const hitR = 12 / camera.zoom;
 
+    if (e.shiftKey && !document.getElementById('editBgMode').checked) {
+        interaction.mode = 'BOX_SELECT';
+        interaction.boxStart = {x: mx, y: my};
+        interaction.boxEnd = {x: mx, y: my};
+        return;
+    }
+
     if (document.getElementById('editBgMode').checked && bgState.img) {
         interaction.mode = 'DRAG_BG'; interaction.lastP = { x: e.clientX, y: e.clientY }; return; 
     }
 
-    if (interaction.mode === 'LINK' && interaction.tileIndex !== -1) {
+    if (interaction.mode === 'LINK' && selectedTiles.size === 1) {
         let targetIdx = getTileAt(mx, my, hitR);
-        if (targetIdx !== -1 && targetIdx !== interaction.tileIndex) {
-            let nxtArr = tiles[interaction.tileIndex].next;
+        let srcIdx = Array.from(selectedTiles)[0];
+        if (targetIdx !== -1 && targetIdx !== srcIdx) {
+            let nxtArr = tiles[srcIdx].next;
             if (nxtArr.includes(targetIdx)) nxtArr.splice(nxtArr.indexOf(targetIdx), 1); 
             else nxtArr.push(targetIdx); 
             updateUI(); draw();
@@ -420,50 +567,74 @@ canvas.onmousedown = (e) => {
 
     interaction.mode = null;
 
-    if (interaction.tileIndex !== -1) {
-        const t = tiles[interaction.tileIndex];
-        const pts = t.type === 's' ? { p0: t.pts[0], p1: t.pts[1] } : { c: t.c, s: t.s, e: t.e };
-        for (let key in pts) {
-            if (Math.hypot(pts[key].x - mx, pts[key].y - my) < hitR) {
-                interaction.mode = 'NODE'; interaction.pointKey = key; return;
-            }
-        }
+    let clickedNode = getNodeAt(mx, my, hitR);
+    if (clickedNode) {
+        if (!selectedTiles.has(clickedNode.index)) selectedTiles = new Set([clickedNode.index]);
+        interaction.activeNodeTile = clickedNode.index;
+        interaction.mode = 'NODE';
+        interaction.pointKey = clickedNode.key;
+        updateUI(); draw();
+        return;
     }
 
     let newSelection = getTileAt(mx, my, hitR);
     if (newSelection !== -1) {
-        interaction.tileIndex = newSelection; updateUI(); draw();
+        if (!selectedTiles.has(newSelection)) {
+            if (e.shiftKey) selectedTiles.add(newSelection);
+            else selectedTiles = new Set([newSelection]);
+        }
+        interaction.mode = 'MOVE_TILES';
+        interaction.lastP = { x: mx, y: my };
+        updateUI(); draw();
     } else {
         interaction.mode = 'PAN'; interaction.lastP = { x: e.clientX, y: e.clientY };
-        interaction.tileIndex = -1; updateUI(); draw();
+        selectedTiles.clear(); updateUI(); draw();
     }
 };
 
 window.onmousemove = (e) => {
-    if (interaction.mode === 'DRAG_BG') {
+    const rect = canvas.getBoundingClientRect();
+    let mx = (e.clientX - rect.left - camera.x) / camera.zoom;
+    let ny = (e.clientY - rect.top - camera.y) / camera.zoom;
+
+    if (interaction.mode === 'BOX_SELECT') {
+        interaction.boxEnd = {x: mx, y: ny};
+        draw();
+    } else if (interaction.mode === 'DRAG_BG') {
         bgState.x += (e.clientX - interaction.lastP.x) / camera.zoom;
         bgState.y += (e.clientY - interaction.lastP.y) / camera.zoom;
         interaction.lastP = { x: e.clientX, y: e.clientY }; draw();
-    } else if (interaction.mode === 'NODE' && interaction.tileIndex !== -1) {
-        const rect = canvas.getBoundingClientRect();
-        let nx = (e.clientX - rect.left - camera.x) / camera.zoom;
-        let ny = (e.clientY - rect.top - camera.y) / camera.zoom;
-        
+    } else if (interaction.mode === 'MOVE_TILES') {
+        let dx = mx - interaction.lastP.x;
+        let dy = ny - interaction.lastP.y;
+        selectedTiles.forEach(idx => {
+            let t = tiles[idx];
+            if (t.type === 's') {
+                t.pts[0].x += dx; t.pts[0].y += dy;
+                t.pts[1].x += dx; t.pts[1].y += dy;
+            } else {
+                t.c.x += dx; t.c.y += dy;
+                t.s.x += dx; t.s.y += dy;
+                t.e.x += dx; t.e.y += dy;
+            }
+        });
+        interaction.lastP = { x: mx, y: ny };
+        draw();
+    } else if (interaction.mode === 'NODE' && interaction.activeNodeTile !== -1) {
         if (document.getElementById('snapNodes').checked && interaction.pointKey !== 'c') {
             const snapR = 15 / camera.zoom;
             for (let i = 0; i < tiles.length; i++) {
-                if (i === interaction.tileIndex) continue;
+                if (i === interaction.activeNodeTile) continue;
                 const other = tiles[i];
                 const opts = other.type === 's' ? [other.pts[0], other.pts[1]] : [other.s, other.e];
                 for (let op of opts) {
-                    if (Math.hypot(op.x - nx, op.y - ny) < snapR) { nx = op.x; ny = op.y; break; }
+                    if (Math.hypot(op.x - mx, op.y - ny) < snapR) { mx = op.x; ny = op.y; break; }
                 }
             }
         }
-
-        const t = tiles[interaction.tileIndex];
-        if (t.type === 's') t.pts[interaction.pointKey === 'p0' ? 0 : 1] = {x: nx, y: ny};
-        else t[interaction.pointKey] = {x: nx, y: ny};
+        const t = tiles[interaction.activeNodeTile];
+        if (t.type === 's') t.pts[interaction.pointKey === 'p0' ? 0 : 1] = {x: mx, y: ny};
+        else t[interaction.pointKey] = {x: mx, y: ny};
         draw();
     } else if (interaction.mode === 'PAN') {
         camera.x += (e.clientX - interaction.lastP.x); camera.y += (e.clientY - interaction.lastP.y);
@@ -471,8 +642,32 @@ window.onmousemove = (e) => {
     }
 };
 
-window.onmouseup = () => { if(interaction.mode !== 'LINK') interaction.mode = null; }
-canvas.addEventListener('keydown', (e) => { if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected(); });
+window.onmouseup = (e) => { 
+    if (interaction.mode === 'BOX_SELECT' && interaction.boxStart && interaction.boxEnd) {
+        let boxed = getTilesInBox(interaction.boxStart.x, interaction.boxStart.y, interaction.boxEnd.x, interaction.boxEnd.y);
+        if (!e.shiftKey) selectedTiles.clear();
+        boxed.forEach(idx => selectedTiles.add(idx));
+        updateUI();
+    }
+    if(interaction.mode !== 'LINK') interaction.mode = null; 
+    draw();
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+    
+    // Copy Paste Hotkeys
+    if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'c' || e.key === 'C') copySelected();
+        if (e.key === 'v' || e.key === 'V') pasteClipboard();
+        if (e.key === 'a' || e.key === 'A') {
+            e.preventDefault();
+            tiles.forEach((_, i) => selectedTiles.add(i));
+            updateUI(); draw();
+        }
+    }
+});
 
 canvas.onwheel = (e) => { 
     if (document.getElementById('editBgMode').checked && bgState.img) {
@@ -501,12 +696,10 @@ function parseNextTiles(str) {
 
 function parseCode() {
     const raw = document.getElementById('codeInput').value;
-    tiles = []; interaction.tileIndex = -1; updateUI();
+    tiles = []; selectedTiles.clear(); updateUI();
     
-    // Split the input into separate path arrays if they exist
     const pathMatches = raw.split(/Vector\.<Tile>\(\s*\[/g);
     let indexOffset = 0;
-    
     const chunksToProcess = pathMatches.length > 1 ? pathMatches.slice(1) : [raw];
 
     chunksToProcess.forEach(pathStr => {
@@ -519,7 +712,6 @@ function parseCode() {
             const transM = content.match(/\.ini_transitionType\((\d+)\)/);
             const layerM = content.match(/\.ini_layer\((\d+)\)/);
             
-            // Adjust the imported 'next' indices by adding the current offset
             let md = { 
                 next: nextM ? parseNextTiles(nextM[1]).map(n => n + indexOffset) : [], 
                 trans: transM ? transM[1] : "0", 
@@ -536,17 +728,14 @@ function parseCode() {
         }
         indexOffset += tilesInThisPath;
     });
-    
     draw();
 }
 
 function exportCode() {
-    // 1. Group tiles into separate disconnected paths
     let paths = [];
     let visited = new Set();
-    
-    // Two-way connection map to group nodes properly
     let connections = tiles.map(() => []);
+    
     tiles.forEach((t, i) => {
         if(t.next) {
             t.next.forEach(nxt => {
@@ -572,19 +761,14 @@ function exportCode() {
                     }
                 });
             }
-            // Sort to keep logical timeline order
             currentPath.sort((a,b) => a-b);
             paths.push(currentPath);
         }
     }
 
-    // 2. Generate code strings for each separated path
     let pathStrings = paths.map(pathIndices => {
-        // Remap global array indices to isolated local indices for the sub-array
         let localIndices = {};
-        pathIndices.forEach((globalIdx, localIdx) => {
-            localIndices[globalIdx] = localIdx;
-        });
+        pathIndices.forEach((globalIdx, localIdx) => { localIndices[globalIdx] = localIdx; });
 
         let out = pathIndices.map(globalIdx => {
             let t = tiles[globalIdx];
@@ -600,7 +784,6 @@ function exportCode() {
     });
 
     if(pathStrings.length === 0) pathStrings = ["Vector.<Tile>([])"];
-
     document.getElementById('codeInput').value = `tileSets = Vector.<Vector.<Tile>>([${pathStrings.join(",\n")}]);`;
 }
 
