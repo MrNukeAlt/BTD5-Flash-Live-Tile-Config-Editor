@@ -149,8 +149,9 @@ document.getElementById('bgInput').addEventListener('change', function(e) {
         const img = new Image();
         img.onload = function() {
             bgState.img = img;
-            bgState.x = 400 - img.width / 2;
-            bgState.y = 300 - img.height / 2;
+            // Center the loaded image dynamically inside the 700x525 grid
+            bgState.x = 350 - img.width / 2;
+            bgState.y = 262.5 - img.height / 2;
             bgState.scale = 1;
             draw();
         }
@@ -167,7 +168,6 @@ function detectPaths() {
     let visited = new Set();
     let groups = [];
     
-    // Build undirected adjacency list to identify connected groupings
     let adj = tiles.map(() => []);
     tiles.forEach((t, i) => {
         if(t.next) {
@@ -178,10 +178,8 @@ function detectPaths() {
         }
     });
 
-    // Reset properties
     tiles.forEach(t => { t.pathGroup = -1; t.localIndex = -1; });
 
-    // BFS to group tiles
     for (let i = 0; i < tiles.length; i++) {
         if (!visited.has(i)) {
             let group = [];
@@ -203,7 +201,6 @@ function detectPaths() {
         }
     }
 
-    // Assign Local and Group identifiers directly to the tiles
     groups.forEach((g, gIdx) => {
         g.forEach((tIdx, lIdx) => {
             tiles[tIdx].pathGroup = gIdx + 1;
@@ -243,7 +240,7 @@ function updateDebugPanel(groups) {
 // UI & State Management
 // ---------------------------------------------------------
 function updateUI() {
-    detectPaths(); // Process group metrics whenever UI/state is expected to shift
+    detectPaths();
 
     const count = selectedTiles.size;
     const hasSel = count > 0;
@@ -258,7 +255,6 @@ function updateUI() {
     document.getElementById('btnCopy').disabled = !hasSel;
     document.getElementById('btnPaste').disabled = clipboard.length === 0;
     
-    // Tools that only work on single selections
     document.getElementById('btnCreateBranch').disabled = !singleSel;
     document.getElementById('btnLinkMode').disabled = !singleSel;
     
@@ -446,14 +442,15 @@ function draw() {
         ctx.globalAlpha = 1.0;
     }
 
+    // Border adjusted to native 700x525 asset parameters
     ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
     ctx.lineWidth = 4 / camera.zoom;
-    ctx.strokeRect(0, 0, 800, 600);
+    ctx.strokeRect(0, 0, 700, 525);
     ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
     ctx.font = `bold ${16 / camera.zoom}px Arial`;
-    ctx.fillText("Map Image Boundary (800x600)", 5, -10 / camera.zoom);
+    ctx.fillText("Map Image Boundary (700x525)", 5, -10 / camera.zoom);
 
     ctx.strokeStyle = "rgba(51, 51, 51, 0.5)"; ctx.lineWidth = 1/camera.zoom;
     for(let i = -3000; i <= 3000; i += 100) {
@@ -469,7 +466,6 @@ function draw() {
     ctx.lineWidth = 2 / camera.zoom;
     let singleIdx = selectedTiles.size === 1 ? Array.from(selectedTiles)[0] : -1;
     
-    // Draw Connections
     tiles.forEach((t, i) => {
         if (!t.next || t.next.length === 0) return;
         let ex = t.type === 's' ? t.pts[1].x : t.e.x;
@@ -492,7 +488,6 @@ function draw() {
             let mx = (sx + ex) / 2, my = (sy + ey) / 2;
             let angle = Math.atan2(sy - ey, sx - ex);
             
-            // Draw arrowhead
             ctx.beginPath();
             ctx.moveTo(mx, my);
             ctx.lineTo(mx - Math.cos(angle - 0.5)*15/camera.zoom, my - Math.sin(angle - 0.5)*15/camera.zoom);
@@ -501,7 +496,6 @@ function draw() {
             ctx.fillStyle = ctx.strokeStyle;
             ctx.fill();
 
-            // Branch Routing Labels (Path 1, Path 2...)
             if (t.next.length > 1) {
                 ctx.fillStyle = "cyan";
                 ctx.font = `bold ${11 / camera.zoom}px Arial`;
@@ -512,7 +506,6 @@ function draw() {
     });
     ctx.setLineDash([]);
 
-    // Draw Main Tiles & Annotations
     const hitRadius = 8 / camera.zoom;
     tiles.forEach((t, i) => {
         const isSelected = selectedTiles.has(i);
@@ -522,10 +515,9 @@ function draw() {
         const isNextOfSelected = singleIdx !== -1 && tiles[singleIdx].next && tiles[singleIdx].next.includes(i);
         const isPrevOfSelected = singleIdx !== -1 && t.next && t.next.includes(singleIdx);
         
-        // Multi-Path Strict Outline Formatting
         if (isSelected) ctx.strokeStyle = '#ffffff';
-        else if (isNextOfSelected) ctx.strokeStyle = '#ffeb3b'; // UI Highlight link targets
-        else if (isPrevOfSelected) ctx.strokeStyle = '#4CAF50'; // UI Highlight link sources
+        else if (isNextOfSelected) ctx.strokeStyle = '#ffeb3b'; 
+        else if (isPrevOfSelected) ctx.strokeStyle = '#4CAF50'; 
         else if (t.trans === "2") ctx.strokeStyle = '#ff00ff';
         else if (t.trans === "1") ctx.strokeStyle = '#00ffff';
         else if (isBranch) ctx.strokeStyle = 'cyan';
@@ -535,7 +527,7 @@ function draw() {
         ctx.lineWidth = isSelected ? 8 : 5;
         ctx.lineCap = "round"; ctx.lineJoin = "round";
         
-        let cx, cy; // For drawing Labels
+        let cx, cy;
 
         if (t.type === 's') { 
             ctx.beginPath(); ctx.moveTo(t.pts[0].x, t.pts[0].y); ctx.lineTo(t.pts[1].x, t.pts[1].y); ctx.stroke();
@@ -550,7 +542,6 @@ function draw() {
             let isCCW = (t.r !== (diff > Math.PI));
             ctx.beginPath(); ctx.arc(t.c.x, t.c.y, rad, sa, ea, isCCW); ctx.stroke();
             
-            // Midpoint logic for arc label
             let midA = isCCW ? sa + diff/2 : sa - ((Math.PI * 2 - diff)/2);
             cx = t.c.x + Math.cos(midA) * rad;
             cy = t.c.y + Math.sin(midA) * rad;
@@ -562,7 +553,6 @@ function draw() {
             }
         }
 
-        // --- Draw Global & Local Group Index Labels ---
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         
@@ -583,7 +573,6 @@ function draw() {
             ctx.fillText(`P${t.pathGroup}-${t.localIndex}`, cx, cy + 10 / camera.zoom);
         }
 
-        // Draw selection hit nodes
         if (isSelected) {
             const drawH = (x, y, color) => { 
                 ctx.fillStyle = color; ctx.fillRect(x - hitRadius, y - hitRadius, hitRadius*2, hitRadius*2); 
@@ -594,7 +583,6 @@ function draw() {
         }
     });
 
-    // Draw Selection Box
     if (interaction.mode === 'BOX_SELECT' && interaction.boxStart && interaction.boxEnd) {
         ctx.fillStyle = 'rgba(33, 150, 243, 0.2)';
         ctx.strokeStyle = '#2196F3';
@@ -710,7 +698,6 @@ canvas.onmousedown = (e) => {
         
         if (targetIdx !== -1 && targetIdx !== srcIdx) {
             let nxtArr = tiles[srcIdx].next;
-            // Native array push without overwriting (satisfies explicit multi-path rule)
             if (nxtArr.includes(targetIdx)) {
                 nxtArr.splice(nxtArr.indexOf(targetIdx), 1); 
             } else {
@@ -844,7 +831,6 @@ const getVec = (block, key) => {
     return match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : null;
 };
 
-// The regex naturally extracts multi-value arrays perfectly: [7,8,9,10]
 function parseNextTiles(str) {
     if (!str) return [];
     const match = str.match(/\[(.*?)\]/);
@@ -890,7 +876,6 @@ function parseCode() {
 }
 
 function exportCode() {
-    // Utilize detectPaths() to natively derive Group separation vectors
     let paths = detectPaths();
 
     let pathStrings = paths.map(pathIndices => {
@@ -899,15 +884,12 @@ function exportCode() {
 
         let out = pathIndices.map(globalIdx => {
             let t = tiles[globalIdx];
-            
-            // Map the global branch target connections back to local indices in this group vector block
             let localNext = (t.next || []).map(n => localIndices[n]).filter(n => n !== undefined);
             
             let str = t.type === 's' 
                 ? `new StraightTile().ini_startPoint(new Vector2(${t.pts[0].x.toFixed(2)},${t.pts[0].y.toFixed(2)})).ini_endPoint(new Vector2(${t.pts[1].x.toFixed(2)},${t.pts[1].y.toFixed(2)}))`
                 : `new ArcTile().ini_baseCentre(new Vector2(${t.c.x.toFixed(2)},${t.c.y.toFixed(2)})).ini_baseStart(new Vector2(${t.s.x.toFixed(2)},${t.s.y.toFixed(2)})).ini_baseEnd(new Vector2(${t.e.x.toFixed(2)},${t.e.y.toFixed(2)}))`;
             
-            // Strict syntax array mapping: .ini_nextTileIndices(Vector.<int>([7,8,9,10]))
             return str + `.ini_nextTileIndices(Vector.<int>([${localNext.join(",")}])).ini_transitionType(${t.trans}).ini_layer(${t.layer})`;
         });
         return `    Vector.<Tile>([\n        ${out.join(",\n        ")}\n    ])`;
@@ -919,7 +901,7 @@ function exportCode() {
 
 window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight - 220; draw(); };
 window.onresize();
-updateUI(); // Init first setup cycle
+updateUI();
 </script>
 </body>
 </html>
