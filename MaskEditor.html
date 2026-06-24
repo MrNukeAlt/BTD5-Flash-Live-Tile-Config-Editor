@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Custom Mask Editor (720x500)</title>
+    <title>Custom Mask Editor (700x520)</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -13,6 +13,7 @@
             --accent: #4CAF50;
             --blue-btn: #2196F3;
             --red-btn: #f44336;
+            --layer-btn: #673ab7;
         }
 
         body {
@@ -40,7 +41,7 @@
 
         h2 { margin: 0 0 5px 0; font-size: 16px; color: #fff; border-bottom: 1px solid #444; padding-bottom: 3px; }
 
-        .tool-section {
+        .button-grid {
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
@@ -62,6 +63,8 @@
 
         button:hover { background-color: #444; }
         button.active { background-color: var(--accent); border-color: #81c784; }
+        
+        .layer-btn.active { background-color: var(--layer-btn); border-color: #9575cd; }
 
         .action-btn {
             width: 100%;
@@ -110,10 +113,9 @@
 
         .canvas-wrapper {
             position: relative;
-            width: 720px;
-            height: 500px;
+            width: 700px; /* Updated map bounds width */
+            height: 520px; /* Updated map bounds height */
             box-shadow: 0 0 25px rgba(0,0,0,0.9);
-            /* Checkerboard pattern for transparent areas */
             background-image: linear-gradient(45deg, #222 25%, transparent 25%), 
                               linear-gradient(-45deg, #222 25%, transparent 25%), 
                               linear-gradient(45deg, transparent 75%, #222 75%), 
@@ -126,14 +128,17 @@
             position: absolute;
             top: 0;
             left: 0;
-            width: 720px;
-            height: 500px;
+            width: 700px;
+            height: 520px;
         }
 
-        #gridCanvas { pointer-events: none; opacity: 0.7; z-index: 4; }
-        #previewCanvas { pointer-events: none; z-index: 3; }
-        #paintCanvas { z-index: 2; cursor: crosshair; }
         #bgCanvas { pointer-events: none; z-index: 1; }
+        .paint-layer { pointer-events: none; transition: opacity 0.2s; }
+        #previewCanvas { pointer-events: none; z-index: 8; }
+        #gridCanvas { pointer-events: none; opacity: 0.7; z-index: 9; }
+        
+        /* The interaction canvas captures all mouse events and sits on top */
+        #interactionCanvas { z-index: 10; cursor: crosshair; }
 
         .control-group {
             display: flex;
@@ -153,12 +158,24 @@
             <button id="loadBtn" class="action-btn" onclick="document.getElementById('imageLoader').click()">Select Map Image</button>
             <input type="file" id="imageLoader" accept="image/*" style="display:none;">
             
-            <button id="downloadBtn" class="action-btn" style="margin-top: 8px;">Download Mask File</button>
+            <button id="downloadBtn" class="action-btn" style="margin-top: 8px;">Download Active Mask</button>
+        </div>
+
+        <div>
+            <h2>Mask Layers (Tabs)</h2>
+            <div class="button-grid">
+                <button class="layer-btn active" data-layer="cantbuildtrack">Track Mask</button>
+                <button class="layer-btn" data-layer="cantbuild">Unplaceable</button>
+                <button class="layer-btn" data-layer="water">Water / Area</button>
+            </div>
+            <div class="control-group" style="margin-top: 8px;">
+                <label><input type="checkbox" id="showInactiveLayers" checked> Show Inactive Layers</label>
+            </div>
         </div>
 
         <div>
             <h2>Tools</h2>
-            <div class="tool-section">
+            <div class="button-grid">
                 <button class="tool-btn active" data-tool="brush">Brush</button>
                 <button class="tool-btn" data-tool="line">Line</button>
                 <button class="tool-btn" data-tool="fill">Bucket</button>
@@ -176,9 +193,9 @@
         <div>
             <h2>Grid & Display</h2>
             <div class="control-group">
-                <label><input type="checkbox" id="toggleGrid" checked> Show Grid & Numbers</label>
+                <label><input type="checkbox" id="toggleGrid" checked> Show Grid (700x520)</label>
             </div>
-            <button id="clearBtn" class="action-btn" style="margin-top: 8px;">Clear Mask Canvas</button>
+            <button id="clearBtn" class="action-btn" style="margin-top: 8px;">Clear Active Canvas</button>
         </div>
 
         <div>
@@ -203,25 +220,44 @@
 
     <div id="workspace">
         <div class="canvas-wrapper">
-            <canvas id="bgCanvas" width="720" height="500"></canvas>
-            <canvas id="paintCanvas" width="720" height="500"></canvas>
-            <canvas id="previewCanvas" width="720" height="500"></canvas>
-            <canvas id="gridCanvas" width="720" height="500"></canvas>
+            <canvas id="bgCanvas" width="700" height="520"></canvas>
+            
+            <canvas id="layer_cantbuildtrack" class="paint-layer" width="700" height="520"></canvas>
+            <canvas id="layer_cantbuild" class="paint-layer" width="700" height="520"></canvas>
+            <canvas id="layer_water" class="paint-layer" width="700" height="520"></canvas>
+            
+            <canvas id="previewCanvas" width="700" height="520"></canvas>
+            <canvas id="gridCanvas" width="700" height="520"></canvas>
+            <canvas id="interactionCanvas" width="700" height="520"></canvas>
         </div>
     </div>
 
 <script>
-    // Canvas References
+    // System Canvases
     const bgCanvas = document.getElementById('bgCanvas');
     const bgCtx = bgCanvas.getContext('2d');
-    const paintCanvas = document.getElementById('paintCanvas');
-    const paintCtx = paintCanvas.getContext('2d', { willReadFrequently: true });
     const previewCanvas = document.getElementById('previewCanvas');
     const previewCtx = previewCanvas.getContext('2d');
     const gridCanvas = document.getElementById('gridCanvas');
     const gridCtx = gridCanvas.getContext('2d');
+    const interactionCanvas = document.getElementById('interactionCanvas');
+
+    // Layer System Initialization
+    const layers = {
+        cantbuildtrack: { canvas: document.getElementById('layer_cantbuildtrack'), ctx: null },
+        cantbuild: { canvas: document.getElementById('layer_cantbuild'), ctx: null },
+        water: { canvas: document.getElementById('layer_water'), ctx: null }
+    };
+
+    for(let key in layers) {
+        layers[key].ctx = layers[key].canvas.getContext('2d', { willReadFrequently: true });
+    }
 
     // Editor Configuration
+    let activeLayerId = 'cantbuildtrack';
+    let paintCanvas = layers[activeLayerId].canvas;
+    let paintCtx = layers[activeLayerId].ctx;
+    
     let currentTool = 'brush';
     let currentColor = '#d536f9';
     let brushSize = 6;
@@ -229,19 +265,53 @@
     let startX = 0;
     let startY = 0;
     let showGrid = true;
+    let showInactive = true;
 
     // DOM Bindings
     const toolBtns = document.querySelectorAll('.tool-btn');
+    const layerBtns = document.querySelectorAll('.layer-btn');
     const swatches = document.querySelectorAll('.color-swatch');
     const customColorInput = document.getElementById('customColor');
     const brushSizeInput = document.getElementById('brushSize');
     const sizeLabel = document.getElementById('sizeLabel');
     const toggleGridBox = document.getElementById('toggleGrid');
+    const showInactiveLayersBox = document.getElementById('showInactiveLayers');
     const clearBtn = document.getElementById('clearBtn');
     const imageLoader = document.getElementById('imageLoader');
     const downloadBtn = document.getElementById('downloadBtn');
 
-    // --- Render Grid Layer (720x500 Grid Coordinates) ---
+    // --- Layer Management ---
+    function updateLayerVisibility() {
+        for(let key in layers) {
+            if (key === activeLayerId) {
+                layers[key].canvas.style.opacity = '1';
+                layers[key].canvas.style.zIndex = '5';
+            } else {
+                layers[key].canvas.style.opacity = showInactive ? '0.35' : '0';
+                layers[key].canvas.style.zIndex = '2';
+            }
+        }
+    }
+
+    layerBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            layerBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeLayerId = btn.dataset.layer;
+            paintCanvas = layers[activeLayerId].canvas;
+            paintCtx = layers[activeLayerId].ctx;
+            updateLayerVisibility();
+        });
+    });
+
+    showInactiveLayersBox.addEventListener('change', (e) => {
+        showInactive = e.target.checked;
+        updateLayerVisibility();
+    });
+
+    updateLayerVisibility(); // Init layer states
+
+    // --- Render Grid Layer (700x520 Grid Coordinates) ---
     function drawGrid() {
         gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
         if (!showGrid) return;
@@ -278,7 +348,7 @@
             }
         }
     }
-    drawGrid(); // Initialize Grid on startup
+    drawGrid(); 
 
     // --- Background Image Loader ---
     imageLoader.addEventListener('change', (e) => {
@@ -288,7 +358,6 @@
             const img = new Image();
             img.onload = function() {
                 bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-                // Fits/stretches structural map cleanly into the 720x500 operational zone
                 bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
             }
             img.src = event.target.result;
@@ -296,10 +365,10 @@
         reader.readAsDataURL(e.target.files[0]);
     });
 
-    // --- Export / Download Mask (Standalone pure PNG output) ---
+    // --- Export / Download Active Mask ---
     downloadBtn.addEventListener('click', () => {
         const link = document.createElement('a');
-        link.download = 'custom_map_mask.png';
+        link.download = `mask_${activeLayerId}.png`;
         link.href = paintCanvas.toDataURL('image/png');
         link.click();
     });
@@ -341,22 +410,22 @@
     });
 
     clearBtn.addEventListener('click', () => {
-        if(confirm("Clear everything on the current mask?")) {
+        if(confirm(`Clear everything on the [${activeLayerId}] mask?`)) {
             paintCtx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
         }
     });
 
     // --- Drawing Engine Helpers ---
     function getCursorCoordinates(evt) {
-        const rect = paintCanvas.getBoundingClientRect();
+        const rect = interactionCanvas.getBoundingClientRect();
         return {
-            x: Math.floor((evt.clientX - rect.left) * (paintCanvas.width / rect.width)),
-            y: Math.floor((evt.clientY - rect.top) * (paintCanvas.height / rect.height))
+            x: Math.floor((evt.clientX - rect.left) * (interactionCanvas.width / rect.width)),
+            y: Math.floor((evt.clientY - rect.top) * (interactionCanvas.height / rect.height))
         };
     }
 
-    // --- Mouse Action Listeners ---
-    paintCanvas.addEventListener('mousedown', (e) => {
+    // --- Mouse Action Listeners (Bound to Interaction Canvas) ---
+    interactionCanvas.addEventListener('mousedown', (e) => {
         const coords = getCursorCoordinates(e);
         startX = coords.x;
         startY = coords.y;
@@ -386,7 +455,7 @@
         }
     });
 
-    paintCanvas.addEventListener('mousemove', (e) => {
+    interactionCanvas.addEventListener('mousemove', (e) => {
         if (!isDrawing) return;
         const coords = getCursorCoordinates(e);
 
@@ -405,7 +474,7 @@
         }
     });
 
-    paintCanvas.addEventListener('mouseup', (e) => {
+    interactionCanvas.addEventListener('mouseup', (e) => {
         if (!isDrawing) return;
         isDrawing = false;
         
@@ -424,7 +493,7 @@
         }
     });
 
-    paintCanvas.addEventListener('mouseleave', () => {
+    interactionCanvas.addEventListener('mouseleave', () => {
         if (isDrawing && currentTool === 'line') {
             previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         }
