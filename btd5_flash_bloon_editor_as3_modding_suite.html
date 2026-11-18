@@ -64,9 +64,9 @@
       <div>
         <div class="flex flex-wrap items-center gap-2">
           <h1 class="font-display text-lg sm:text-xl font-bold tracking-wide text-white">BTD5 / DELUXE FLASH <span class="text-amber-400">BLOON EDITOR</span></h1>
-          <span class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">bloons.Bloon • BLOON_COUNT = 14</span>
+          <span class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">bloons.Bloon • BLOON_COUNT = <span id="header-bloon-count">14</span></span>
         </div>
-        <p class="text-xs text-slate-400">JPEXS FFDec Vector Table Patcher, Bitmask Inspector &amp; Live Track Simulator</p>
+        <p class="text-xs text-slate-400">JPEXS FFDec Vector Table Patcher, Custom Bitmask Inspector &amp; Live Track Simulator</p>
       </div>
     </div>
 
@@ -95,14 +95,14 @@
   <!-- Main 3-Column Workstation -->
   <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 max-w-[1850px] w-full mx-auto">
 
-    <!-- LEFT SIDEBAR: Bloon Roster + Global Wave/Physics Controls (3 cols on lg, 3 on xl) -->
+    <!-- LEFT SIDEBAR: Bloon Roster + Global Wave/Physics Controls -->
     <aside class="lg:col-span-3 flex flex-col gap-4 h-fit">
 
       <!-- Bloon Roster Card -->
       <div class="bg-nk-panel border border-nk-border rounded-2xl p-3 flex flex-col gap-2.5">
         <div class="flex items-center justify-between px-1">
           <div>
-            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Bloon Roster (0–13)</h2>
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Bloon Roster (0–<span id="roster-max-id">13</span>)</h2>
             <p class="text-[10px] font-mono text-slate-500">BLOON_COUNT = <span id="bloon-count-label">14</span></p>
           </div>
           <button onclick="addCustomBloonSlot()" title="Add Custom Bloon ID (14+)" class="nk-btn text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30">
@@ -198,7 +198,7 @@
 
     </aside>
 
-    <!-- CENTER PANEL: Selected Bloon Properties, Child Cascade & Bitmask Immunities (5 cols on lg) -->
+    <!-- CENTER PANEL: Selected Bloon Properties, Child Cascade & Bitmask Immunities -->
     <section class="lg:col-span-5 flex flex-col gap-4">
 
       <!-- Selected Bloon Header Card -->
@@ -322,7 +322,7 @@
         </div>
       </div>
 
-      <!-- Bitmask Immunities Editor -->
+      <!-- Bitmask Immunities Editor + Custom Immunities Manager -->
       <div class="bg-nk-panel border border-nk-border rounded-2xl p-4">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div>
@@ -330,11 +330,57 @@
               <span class="w-2 h-2 rounded-full bg-sky-400"></span>
               Bitmask Immunities (<code class="text-sky-300 font-mono text-xs">baseImmunitiesByType</code>)
             </h3>
-            <p class="text-xs text-slate-400 mt-0.5">Named bitflags from <code class="text-slate-300">bloons.Bloon</code>.</p>
+            <p class="text-xs text-slate-400 mt-0.5">Built-in &amp; custom bitflags from <code class="text-slate-300">bloons.Bloon</code>.</p>
           </div>
-          <div class="flex items-center gap-1.5">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button onclick="toggleCustomImmunityDrawer()" id="toggle-custom-imm-btn" class="nk-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/35 flex items-center gap-1">
+              <span>+ Add Custom Immunity</span>
+            </button>
             <button onclick="clearImmunities()" class="nk-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-nk-card hover:bg-slate-800 text-slate-300 border border-nk-border">Clear (0)</button>
             <button onclick="setImmunityAll()" class="nk-btn px-2.5 py-1 rounded-lg text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30">IMMUNITY_ALL</button>
+          </div>
+        </div>
+
+        <!-- Collapsible Create / Edit Custom Immunity Form -->
+        <div id="custom-immunity-drawer" class="hidden bg-nk-card border border-purple-500/40 rounded-xl p-3 mb-3 space-y-2.5 shadow-inner">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+              <h4 id="custom-imm-form-title" class="text-xs font-bold uppercase tracking-wider text-purple-200">Create Custom Immunity Bitflag</h4>
+            </div>
+            <button onclick="closeCustomImmunityDrawer()" class="text-xs text-slate-400 hover:text-white px-1.5 py-0.5 rounded">Cancel</button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label class="text-[10px] font-mono text-purple-300 block mb-0.5">AS3 Constant Name</label>
+              <input id="custom-imm-const" type="text" placeholder="IMMUNITY_PURPLE" class="w-full bg-nk-bg border border-nk-border focus:border-purple-400 focus:outline-none rounded-lg px-2.5 py-1.5 text-xs font-mono text-white uppercase" />
+            </div>
+            <div>
+              <label class="text-[10px] font-mono text-purple-300 block mb-0.5">Display Label</label>
+              <input id="custom-imm-label" type="text" placeholder="Plasma / Energy" class="w-full bg-nk-bg border border-nk-border focus:border-purple-400 focus:outline-none rounded-lg px-2.5 py-1.5 text-xs text-white" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-0.5">
+                <label class="text-[10px] font-mono text-purple-300">Bit Value (Power of 2)</label>
+                <span id="custom-imm-shift-hint" class="text-[10px] font-mono text-slate-400">1 &lt;&lt; 9</span>
+              </div>
+              <input id="custom-imm-bit" type="number" min="1" max="1073741824" step="1" oninput="updateCustomImmunityShiftHint(this.value)" class="w-full bg-nk-bg border border-nk-border focus:border-purple-400 focus:outline-none rounded-lg px-2.5 py-1.5 text-xs font-mono text-white tabular-nums" />
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div class="flex flex-wrap items-center gap-1 text-[10px] font-mono text-slate-400">
+              <span>Quick powers:</span>
+              <button type="button" onclick="setCustomImmBitPreset(512)" class="px-1.5 py-0.5 rounded bg-nk-bg hover:bg-slate-800 border border-nk-border text-purple-300">512</button>
+              <button type="button" onclick="setCustomImmBitPreset(1024)" class="px-1.5 py-0.5 rounded bg-nk-bg hover:bg-slate-800 border border-nk-border text-purple-300">1024</button>
+              <button type="button" onclick="setCustomImmBitPreset(2048)" class="px-1.5 py-0.5 rounded bg-nk-bg hover:bg-slate-800 border border-nk-border text-purple-300">2048</button>
+              <button type="button" onclick="setCustomImmBitPreset(4096)" class="px-1.5 py-0.5 rounded bg-nk-bg hover:bg-slate-800 border border-nk-border text-purple-300">4096</button>
+              <button type="button" onclick="setCustomImmBitPreset(8192)" class="px-1.5 py-0.5 rounded bg-nk-bg hover:bg-slate-800 border border-nk-border text-purple-300">8192</button>
+            </div>
+            <button type="button" onclick="saveCustomImmunity()" id="save-custom-imm-btn" class="nk-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-500 hover:bg-purple-400 text-slate-950 shadow">
+              Save Custom Flag
+            </button>
           </div>
         </div>
 
@@ -346,11 +392,11 @@
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <span class="text-xs text-slate-400">Raw Int:</span>
-            <input id="input-immunity-raw" type="number" min="0" max="65535" oninput="onRawImmunityChange(this.value)" class="w-24 bg-nk-card border border-nk-border focus:border-sky-400 focus:outline-none rounded-lg px-2.5 py-1 text-sm font-mono font-bold text-sky-300 text-right tabular-nums" />
+            <input id="input-immunity-raw" type="number" min="0" max="2147483647" oninput="onRawImmunityChange(this.value)" class="w-24 bg-nk-card border border-nk-border focus:border-sky-400 focus:outline-none rounded-lg px-2.5 py-1 text-sm font-mono font-bold text-sky-300 text-right tabular-nums" />
           </div>
         </div>
 
-        <!-- Flag Checkboxes Grid -->
+        <!-- Flag Checkboxes Grid (Built-in + Custom) -->
         <div id="immunity-flags-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <!-- Populated dynamically -->
         </div>
@@ -358,7 +404,7 @@
 
     </section>
 
-    <!-- RIGHT PANEL: Track Simulator, Pop-Tree & Live AS3 Code Exporter (4 cols on lg) -->
+    <!-- RIGHT PANEL: Track Simulator, Pop-Tree & Live AS3 Code Exporter -->
     <aside class="lg:col-span-4 flex flex-col gap-4 h-fit">
 
       <!-- Interactive HTML5 Canvas Track & Pop Simulator -->
@@ -502,8 +548,8 @@
      * =========================================================================
      */
 
-    // Exact Immunity Bitflags from the provided bloons.Bloon class
-    const IMMUNITY_FLAGS = [
+    // Exact Built-In Immunity Bitflags from the provided bloons.Bloon class
+    const BUILTIN_IMMUNITY_FLAGS = [
       { bit: 1,   name: 'IMMUNITY_NO_DETECTION', label: 'Camo / No Detection', desc: 'Requires camo detection (1)' },
       { bit: 2,   name: 'IMMUNITY_ICE',          label: 'Ice / Freeze',        desc: 'Immune to Ice Towers (2)' },
       { bit: 4,   name: 'IMMUNITY_GLUE',         label: 'Glue',                desc: 'Immune to Glue Gunners (4)' },
@@ -514,6 +560,13 @@
       { bit: 128, name: 'IMMUNITY_BFB',          label: 'BFB Class',           desc: 'BFB-specific immunities (128)' },
       { bit: 256, name: 'IMMUNITY_ZOMG',         label: 'ZOMG (BOSS) Class',   desc: 'ZOMG-specific immunities (256)' }
     ];
+
+    // Reserved AS3 immunity constants that are not custom user flags
+    const VANILLA_IMMUNITY_NAMES = new Set([
+      'IMMUNITY_NONE',
+      'IMMUNITY_ALL',
+      ...BUILTIN_IMMUNITY_FLAGS.map(f => f.name)
+    ]);
 
     // Visual colors & shapes for BTD5 Bloons (0: RED through 13: BOSS / ZOMG)
     const BLOON_VISUALS = [
@@ -547,6 +600,7 @@
           sabotage: false,
           weakMoabs: false
         },
+        customImmunities: [],
         bloons: [
           { id: 0,  constName: 'RED',     strName: 'red',     health: 1,    speed: 1,    immunities: 0,   rbe: 1,     childType: null, childCount: 1, rangeAddon: 0,   safe147: 1 },
           { id: 1,  constName: 'BLUE',    strName: 'blue',    health: 1,    speed: 1.4,  immunities: 0,   rbe: 2,     childType: null, childCount: 1, rangeAddon: 0,   safe147: 1 },
@@ -569,6 +623,7 @@
     let appState = getVanillaState();
     let selectedBloonId = 0;
     let exportMode = 'vectors'; // 'vectors' | 'full'
+    let editingCustomImmunityIndex = null; // null when creating new, or index in appState.customImmunities when editing
 
     /**
      * =========================================================================
@@ -591,6 +646,261 @@
         toast.style.transform = 'translateY(8px)';
         setTimeout(() => toast.remove(), 220);
       }, 2600);
+    }
+
+    /**
+     * =========================================================================
+     * CUSTOM & BUILT-IN BITMASK IMMUNITY MANAGER
+     * =========================================================================
+     */
+    function getAllImmunityFlags() {
+      const custom = (appState.customImmunities || []).map((flag, idx) => ({
+        ...flag,
+        isCustom: true,
+        customIndex: idx
+      }));
+      return [
+        ...BUILTIN_IMMUNITY_FLAGS.map(f => ({ ...f, isCustom: false })),
+        ...custom
+      ];
+    }
+
+    function getNextAvailableBit() {
+      const usedBits = new Set(getAllImmunityFlags().map(f => Number(f.bit)));
+      let candidate = 512; // 1 << 9 (first unused power of 2 after IMMUNITY_ZOMG = 256)
+      while (usedBits.has(candidate) && candidate <= 1073741824) {
+        candidate *= 2;
+      }
+      return candidate;
+    }
+
+    function updateCustomImmunityShiftHint(bitVal) {
+      const num = parseInt(bitVal, 10);
+      const hintEl = document.getElementById('custom-imm-shift-hint');
+      if (!num || num <= 0) {
+        hintEl.textContent = 'Invalid bit';
+        return;
+      }
+      if ((num & (num - 1)) === 0) {
+        const shift = Math.round(Math.log2(num));
+        hintEl.textContent = `1 << ${shift}`;
+      } else {
+        hintEl.textContent = `0x${num.toString(16).toUpperCase()}`;
+      }
+    }
+
+    function setCustomImmBitPreset(bit) {
+      const input = document.getElementById('custom-imm-bit');
+      input.value = bit;
+      updateCustomImmunityShiftHint(bit);
+    }
+
+    function toggleCustomImmunityDrawer() {
+      const drawer = document.getElementById('custom-immunity-drawer');
+      if (!drawer.classList.contains('hidden') && editingCustomImmunityIndex === null) {
+        closeCustomImmunityDrawer();
+        return;
+      }
+      openCustomImmunityDrawer(null);
+    }
+
+    function openCustomImmunityDrawer(editIdx = null) {
+      const drawer = document.getElementById('custom-immunity-drawer');
+      const titleEl = document.getElementById('custom-imm-form-title');
+      const saveBtn = document.getElementById('save-custom-imm-btn');
+      const constInput = document.getElementById('custom-imm-const');
+      const labelInput = document.getElementById('custom-imm-label');
+      const bitInput = document.getElementById('custom-imm-bit');
+
+      editingCustomImmunityIndex = editIdx;
+
+      if (editIdx !== null && appState.customImmunities[editIdx]) {
+        const existing = appState.customImmunities[editIdx];
+        titleEl.textContent = `Edit Custom Immunity (${existing.name})`;
+        saveBtn.textContent = 'Update Custom Flag';
+        constInput.value = existing.name;
+        labelInput.value = existing.label;
+        bitInput.value = existing.bit;
+        updateCustomImmunityShiftHint(existing.bit);
+      } else {
+        const nextBit = getNextAvailableBit();
+        const nextNum = (appState.customImmunities || []).length + 1;
+        titleEl.textContent = 'Create Custom Immunity Bitflag';
+        saveBtn.textContent = 'Save Custom Flag';
+        constInput.value = nextNum === 1 ? 'IMMUNITY_PURPLE' : `IMMUNITY_CUSTOM_${nextNum}`;
+        labelInput.value = nextNum === 1 ? 'Plasma / Energy' : `Custom Immunity ${nextNum}`;
+        bitInput.value = nextBit;
+        updateCustomImmunityShiftHint(nextBit);
+      }
+
+      drawer.classList.remove('hidden');
+      constInput.focus();
+    }
+
+    function closeCustomImmunityDrawer() {
+      editingCustomImmunityIndex = null;
+      document.getElementById('custom-immunity-drawer').classList.add('hidden');
+    }
+
+    function saveCustomImmunity() {
+      const constInput = document.getElementById('custom-imm-const');
+      const labelInput = document.getElementById('custom-imm-label');
+      const bitInput = document.getElementById('custom-imm-bit');
+
+      let rawName = constInput.value.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+      if (!rawName) {
+        showToast('Please enter a valid AS3 constant name.', 'error');
+        return;
+      }
+      if (!rawName.startsWith('IMMUNITY_')) {
+        rawName = 'IMMUNITY_' + rawName;
+      }
+
+      const bit = parseInt(bitInput.value, 10);
+      if (isNaN(bit) || bit <= 0 || bit > 2147483647) {
+        showToast('Bit value must be a positive integer (e.g. 512, 1024).', 'error');
+        return;
+      }
+
+      if (VANILLA_IMMUNITY_NAMES.has(rawName)) {
+        showToast(`${rawName} is reserved by vanilla Bloon.as.`, 'error');
+        return;
+      }
+
+      const allFlags = getAllImmunityFlags();
+      const duplicateName = allFlags.some(f => f.name === rawName && (!f.isCustom || f.customIndex !== editingCustomImmunityIndex));
+      if (duplicateName) {
+        showToast(`An immunity named ${rawName} already exists.`, 'error');
+        return;
+      }
+
+      const duplicateBit = allFlags.some(f => Number(f.bit) === bit && (!f.isCustom || f.customIndex !== editingCustomImmunityIndex));
+      if (duplicateBit) {
+        showToast(`Bit value ${bit} is already assigned to another immunity flag.`, 'error');
+        return;
+      }
+
+      const label = labelInput.value.trim() || rawName.replace(/^IMMUNITY_/, '');
+
+      if (!Array.isArray(appState.customImmunities)) {
+        appState.customImmunities = [];
+      }
+
+      if (editingCustomImmunityIndex !== null && appState.customImmunities[editingCustomImmunityIndex]) {
+        const oldBit = Number(appState.customImmunities[editingCustomImmunityIndex].bit);
+        appState.customImmunities[editingCustomImmunityIndex] = {
+          bit,
+          name: rawName,
+          label,
+          desc: `Custom bitflag (${bit})`
+        };
+        // Migrate bit on bloons if the bit value changed
+        if (oldBit !== bit) {
+          appState.bloons.forEach(b => {
+            if ((b.immunities & oldBit) === oldBit) {
+              b.immunities = (b.immunities & ~oldBit) | bit;
+            }
+          });
+        }
+        showToast(`Updated custom immunity ${rawName} (${bit})`, 'success');
+      } else {
+        appState.customImmunities.push({
+          bit,
+          name: rawName,
+          label,
+          desc: `Custom bitflag (${bit})`
+        });
+        // Automatically enable this new custom immunity on the currently selected bloon for convenience
+        const currentBloon = getSelectedBloon();
+        if (currentBloon) {
+          currentBloon.immunities |= bit;
+        }
+        showToast(`Created ${rawName} (${bit}) and enabled on ${currentBloon ? currentBloon.constName : 'bloon'}!`, 'success');
+      }
+
+      closeCustomImmunityDrawer();
+      refreshAllUI(false);
+    }
+
+    function deleteCustomImmunity(customIdx, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      const target = appState.customImmunities[customIdx];
+      if (!target) return;
+
+      const bitToClear = Number(target.bit);
+      // Clear that bit from all bloons so no dangling unknown bits remain
+      appState.bloons.forEach(b => {
+        if ((b.immunities & bitToClear) === bitToClear) {
+          b.immunities &= ~bitToClear;
+        }
+      });
+
+      appState.customImmunities.splice(customIdx, 1);
+      if (editingCustomImmunityIndex === customIdx) {
+        closeCustomImmunityDrawer();
+      }
+      refreshAllUI(false);
+      showToast(`Deleted custom immunity ${target.name} (${bitToClear})`, 'info');
+    }
+
+    function editCustomImmunity(customIdx, event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      openCustomImmunityDrawer(customIdx);
+    }
+
+    function formatImmunityBitwise(mask, useNames = true) {
+      const val = Number(mask) || 0;
+      if (!useNames) return String(val);
+      if (val === 0) return 'IMMUNITY_NONE';
+      if (val === 65535) return 'IMMUNITY_ALL';
+
+      const parts = [];
+      let remainder = val;
+      // Sort flags ascending by bit so output order is clean and deterministic
+      const sortedFlags = [...getAllImmunityFlags()].sort((a, b) => Number(a.bit) - Number(b.bit));
+      for (const flag of sortedFlags) {
+        const b = Number(flag.bit);
+        if (b > 0 && (val & b) === b) {
+          parts.push(flag.name);
+          remainder &= ~b;
+        }
+      }
+      if (remainder > 0) parts.push(String(remainder));
+      return parts.length > 0 ? parts.join(' | ') : 'IMMUNITY_NONE';
+    }
+
+    function toggleImmunityBit(bit) {
+      const bloon = getSelectedBloon();
+      if (!bloon) return;
+      bloon.immunities ^= Number(bit);
+      refreshAllUI(false);
+    }
+
+    function onRawImmunityChange(val) {
+      const bloon = getSelectedBloon();
+      if (!bloon) return;
+      bloon.immunities = Math.max(0, Math.min(2147483647, parseInt(val, 10) || 0));
+      refreshAllUI(false);
+    }
+
+    function clearImmunities() {
+      const bloon = getSelectedBloon();
+      if (!bloon) return;
+      bloon.immunities = 0;
+      refreshAllUI(false);
+    }
+
+    function setImmunityAll() {
+      const bloon = getSelectedBloon();
+      if (!bloon) return;
+      bloon.immunities = 65535;
+      refreshAllUI(false);
     }
 
     /**
@@ -690,7 +1000,7 @@
       const bloon = getSelectedBloon();
       if (!bloon) return;
       bloon.rbe = calculateBloonRBE(bloon.id);
-      refreshAllUI();
+      refreshAllUI(false);
       showToast(`Calculated RBE for ${bloon.constName}: ${bloon.rbe}`, 'success');
     }
 
@@ -698,59 +1008,8 @@
       appState.bloons.forEach(b => {
         b.rbe = calculateBloonRBE(b.id);
       });
-      refreshAllUI();
+      refreshAllUI(false);
       showToast('Recalculated RBE for all bloon types!', 'success');
-    }
-
-    /**
-     * =========================================================================
-     * BITMASK IMMUNITY HELPERS
-     * =========================================================================
-     */
-    function formatImmunityBitwise(mask, useNames = true) {
-      const val = Number(mask) || 0;
-      if (!useNames) return String(val);
-      if (val === 0) return 'IMMUNITY_NONE';
-      if (val === 65535) return 'IMMUNITY_ALL';
-
-      const parts = [];
-      let remainder = val;
-      for (const flag of IMMUNITY_FLAGS) {
-        if ((val & flag.bit) === flag.bit) {
-          parts.push(flag.name);
-          remainder &= ~flag.bit;
-        }
-      }
-      if (remainder > 0) parts.push(String(remainder));
-      return parts.length > 0 ? parts.join(' | ') : 'IMMUNITY_NONE';
-    }
-
-    function toggleImmunityBit(bit) {
-      const bloon = getSelectedBloon();
-      if (!bloon) return;
-      bloon.immunities ^= bit;
-      refreshAllUI();
-    }
-
-    function onRawImmunityChange(val) {
-      const bloon = getSelectedBloon();
-      if (!bloon) return;
-      bloon.immunities = Math.max(0, Math.min(65535, parseInt(val, 10) || 0));
-      refreshAllUI();
-    }
-
-    function clearImmunities() {
-      const bloon = getSelectedBloon();
-      if (!bloon) return;
-      bloon.immunities = 0;
-      refreshAllUI();
-    }
-
-    function setImmunityAll() {
-      const bloon = getSelectedBloon();
-      if (!bloon) return;
-      bloon.immunities = 65535;
-      refreshAllUI();
     }
 
     /**
@@ -764,7 +1023,7 @@
 
     function selectBloon(id) {
       selectedBloonId = id;
-      refreshAllUI();
+      refreshAllUI(true);
       resetTrackSimulation();
     }
 
@@ -775,7 +1034,7 @@
       if (cleaned) {
         bloon.constName = cleaned;
         bloon.strName = cleaned.toLowerCase();
-        refreshAllUI();
+        refreshAllUI(true);
       }
     }
 
@@ -837,7 +1096,7 @@
         safe147: 2048
       });
       selectedBloonId = nextId;
-      refreshAllUI();
+      refreshAllUI(true);
       resetTrackSimulation();
       showToast(`Added custom bloon ID ${nextId} (BLOON_COUNT = ${appState.bloons.length})`, 'success');
     }
@@ -847,7 +1106,7 @@
       appState.bloons = appState.bloons.filter(b => b.id !== selectedBloonId);
       appState.bloons.forEach((b, idx) => { b.id = idx; });
       selectedBloonId = appState.bloons.length - 1;
-      refreshAllUI();
+      refreshAllUI(true);
       resetTrackSimulation();
       showToast('Deleted custom bloon slot', 'info');
     }
@@ -858,7 +1117,7 @@
       const curr = getSelectedBloon();
       if (orig && curr) {
         Object.assign(curr, JSON.parse(JSON.stringify(orig)));
-        refreshAllUI();
+        refreshAllUI(true);
         resetTrackSimulation();
         showToast(`Reset ${curr.constName} to Vanilla BTD5 defaults`, 'info');
       }
@@ -872,7 +1131,7 @@
       } else if (presetName === 'freeplay100') {
         appState = base;
         appState.globals.waveIndex = 100;
-        selectedBloonId = 10; // Select Ceramic to highlight 38 HP Super Ceramic rule
+        selectedBloonId = 10;
         showToast('Simulated Freeplay Round 100 (Super Ceramics & 1.8x Blimps)', 'success');
       } else if (presetName === 'speed') {
         appState = base;
@@ -891,7 +1150,8 @@
       if (!appState.bloons.some(b => b.id === selectedBloonId)) {
         selectedBloonId = 0;
       }
-      refreshAllUI();
+      closeCustomImmunityDrawer();
+      refreshAllUI(true);
       resetTrackSimulation();
     }
 
@@ -938,6 +1198,8 @@
       });
 
       document.getElementById('bloon-count-label').textContent = appState.bloons.length;
+      document.getElementById('header-bloon-count').textContent = appState.bloons.length;
+      document.getElementById('roster-max-id').textContent = Math.max(0, appState.bloons.length - 1);
       document.getElementById('roster-wave-badge').textContent = `R${appState.globals.waveIndex}`;
     }
 
@@ -1007,26 +1269,51 @@
       }
       childSelect.value = b.childType === null || b.childType === undefined ? 'null' : String(b.childType);
 
-      // Bitmask Immunities
+      // Bitmask Immunities (Built-in + Custom)
       document.getElementById('input-immunity-raw').value = b.immunities;
       document.getElementById('bitmask-expression').textContent = formatImmunityBitwise(b.immunities, true);
 
       const flagsGrid = document.getElementById('immunity-flags-grid');
       flagsGrid.innerHTML = '';
-      IMMUNITY_FLAGS.forEach(flag => {
-        const active = (b.immunities & flag.bit) === flag.bit;
-        const card = document.createElement('label');
-        card.className = `flex items-start gap-2.5 p-2 rounded-xl border cursor-pointer transition select-none ${
+      const allFlags = getAllImmunityFlags();
+
+      allFlags.forEach(flag => {
+        const bitNum = Number(flag.bit);
+        const active = (b.immunities & bitNum) === bitNum;
+        const card = document.createElement('div');
+        card.className = `flex items-start justify-between gap-2 p-2 rounded-xl border transition select-none ${
           active
-            ? 'bg-sky-950/55 border-sky-500/60 text-white'
+            ? (flag.isCustom ? 'bg-purple-950/55 border-purple-500/60 text-white' : 'bg-sky-950/55 border-sky-500/60 text-white')
             : 'bg-nk-card/60 hover:bg-nk-card border-nk-border text-slate-300'
         }`;
+
+        const customControlsHtml = flag.isCustom
+          ? `<div class="flex items-center gap-1 shrink-0">
+               <button type="button" onclick="editCustomImmunity(${flag.customIndex}, event)" title="Edit Custom Immunity" class="p-1 rounded-lg bg-nk-bg/80 hover:bg-slate-800 text-purple-300 border border-purple-500/30">
+                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+               </button>
+               <button type="button" onclick="deleteCustomImmunity(${flag.customIndex}, event)" title="Delete Custom Immunity" class="p-1 rounded-lg bg-nk-bg/80 hover:bg-rose-950 text-rose-400 border border-rose-500/30">
+                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+               </button>
+             </div>`
+          : '';
+
+        const badgeHtml = flag.isCustom
+          ? `<span class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-purple-500/25 text-purple-200 border border-purple-400/40 shrink-0">Custom</span>`
+          : '';
+
         card.innerHTML = `
-          <input type="checkbox" ${active ? 'checked' : ''} onchange="toggleImmunityBit(${flag.bit})" class="mt-0.5 accent-sky-400 rounded" />
-          <div class="min-w-0">
-            <div class="text-xs font-semibold truncate">${flag.label}</div>
-            <div class="text-[10px] font-mono text-sky-300/90">${flag.name} (${flag.bit})</div>
-          </div>
+          <label class="flex items-start gap-2.5 cursor-pointer min-w-0 flex-1">
+            <input type="checkbox" ${active ? 'checked' : ''} onchange="toggleImmunityBit(${bitNum})" class="mt-0.5 ${flag.isCustom ? 'accent-purple-400' : 'accent-sky-400'} rounded shrink-0" />
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-semibold truncate">${flag.label}</span>
+                ${badgeHtml}
+              </div>
+              <div class="text-[10px] font-mono ${flag.isCustom ? 'text-purple-300/90' : 'text-sky-300/90'} truncate">${flag.name} (${bitNum})</div>
+            </div>
+          </label>
+          ${customControlsHtml}
         `;
         flagsGrid.appendChild(card);
       });
@@ -1125,6 +1412,11 @@
       const useBitwiseNames = document.getElementById('opt-bitwise-names').checked;
       const g = appState.globals;
       const bloons = appState.bloons;
+      const customImmunities = appState.customImmunities || [];
+
+      const customImmBlock = customImmunities.length > 0
+        ? `\n      // Custom Immunity Bitflags\n${customImmunities.map(c => `      public static const ${c.name}:int = ${c.bit};`).join('\n')}\n`
+        : '';
 
       const constDefs = bloons.map(b => `      public static const ${b.constName}:int = ${b.id};`).join('\n');
       const allTypesList = bloons.map(b => b.constName).join(',');
@@ -1148,7 +1440,7 @@
 // BTD5 / Deluxe Flash — bloons.Bloon Patched Definitions
 // Generated for JPEXS Free Flash Decompiler (Edit ActionScript)
 // =========================================================
-
+${customImmBlock}
 ${constDefs}
 
       public static const BLOON_COUNT:int = ${bloons.length};
@@ -1190,7 +1482,7 @@ ${constDefs}
         code = `// =========================================================
 // BTD5 / Deluxe Flash — bloons.Bloon Vectors & Scaling Methods
 // =========================================================
-
+${customImmBlock}
 ${constDefs}
 
       public static const BLOON_COUNT:int = ${bloons.length};
@@ -1288,7 +1580,7 @@ ${constDefs}
 
     /**
      * =========================================================================
-     * IMPORT AS3 / JSON PARSER
+     * IMPORT AS3 / JSON PARSER (Supports Custom Immunities Round-Trip)
      * =========================================================================
      */
     function openImportModal() {
@@ -1334,9 +1626,13 @@ ${constDefs}
         try {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed.bloons) && parsed.globals) {
+            if (!Array.isArray(parsed.customImmunities)) {
+              parsed.customImmunities = [];
+            }
             appState = parsed;
             selectedBloonId = 0;
-            refreshAllUI();
+            closeCustomImmunityDrawer();
+            refreshAllUI(true);
             resetTrackSimulation();
             closeImportModal();
             showToast('Successfully imported JSON Bloon profile!', 'success');
@@ -1371,16 +1667,6 @@ ${constDefs}
           return;
         }
 
-        const nameToId = {};
-        appState.bloons.forEach(b => { nameToId[b.constName] = b.id; });
-        const constRegex = /public\s+static\s+const\s+([A-Za-z0-9_]+)\s*:\s*int\s*=\s*(\d+)\s*;/g;
-        let m;
-        while ((m = constRegex.exec(raw)) !== null) {
-          if (!m[1].startsWith('IMMUNITY_') && m[1] !== 'BLOON_COUNT') {
-            nameToId[m[1]] = parseInt(m[2], 10);
-          }
-        }
-
         const immConstMap = {
           IMMUNITY_NONE: 0,
           IMMUNITY_NO_DETECTION: 1,
@@ -1395,6 +1681,37 @@ ${constDefs}
           IMMUNITY_ALL: 65535
         };
 
+        // Detect custom IMMUNITY_* constants and register them
+        const detectedCustomImmunities = [];
+        const nameToId = {};
+        appState.bloons.forEach(b => { nameToId[b.constName] = b.id; });
+        const idToConstName = {};
+
+        const constRegex = /public\s+static\s+const\s+([A-Za-z0-9_]+)\s*:\s*int\s*=\s*(\d+)\s*;/g;
+        let m;
+        while ((m = constRegex.exec(raw)) !== null) {
+          const cName = m[1];
+          const cVal = parseInt(m[2], 10);
+          if (cName.startsWith('IMMUNITY_')) {
+            immConstMap[cName] = cVal;
+            if (!VANILLA_IMMUNITY_NAMES.has(cName) && cVal > 0) {
+              detectedCustomImmunities.push({
+                bit: cVal,
+                name: cName,
+                label: cName.replace(/^IMMUNITY_/, '').replace(/_/g, ' '),
+                desc: `Custom bitflag (${cVal})`
+              });
+            }
+          } else if (cName !== 'BLOON_COUNT') {
+            nameToId[cName] = cVal;
+            idToConstName[cVal] = cName;
+          }
+        }
+
+        if (detectedCustomImmunities.length > 0) {
+          appState.customImmunities = detectedCustomImmunities;
+        }
+
         const count = Math.max(
           healthArr ? healthArr.length : 0,
           speedArr ? speedArr.length : 0,
@@ -1405,7 +1722,7 @@ ${constDefs}
         for (let i = 0; i < count; i++) {
           const existing = appState.bloons[i] || {
             id: i,
-            constName: `CUSTOM_${i}`,
+            constName: idToConstName[i] || `CUSTOM_${i}`,
             strName: `custom_${i}`,
             health: 1,
             speed: 1,
@@ -1417,6 +1734,7 @@ ${constDefs}
             safe147: 1
           };
           const b = { ...existing, id: i };
+          if (idToConstName[i]) b.constName = idToConstName[i];
           if (strArr && strArr[i] !== undefined) b.strName = strArr[i].replace(/^["']|["']$/g, '');
           if (healthArr && healthArr[i] !== undefined) b.health = parseInt(healthArr[i], 10) || 1;
           if (speedArr && speedArr[i] !== undefined) b.speed = parseFloat(speedArr[i]) || 0;
@@ -1451,10 +1769,16 @@ ${constDefs}
         if (moabMatch) appState.globals.moabLayer = parseInt(moabMatch[1], 10);
 
         selectedBloonId = 0;
-        refreshAllUI();
+        closeCustomImmunityDrawer();
+        refreshAllUI(true);
         resetTrackSimulation();
         closeImportModal();
-        showToast('Parsed Bloon.as vectors into editor!', 'success');
+        showToast(
+          detectedCustomImmunities.length > 0
+            ? `Parsed Bloon.as + ${detectedCustomImmunities.length} custom immunity flag(s)!`
+            : 'Parsed Bloon.as vectors into editor!',
+          'success'
+        );
       } catch (err) {
         showToast('Error parsing AS3 code: ' + err.message, 'error');
       }
